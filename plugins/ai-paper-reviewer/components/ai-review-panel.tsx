@@ -221,38 +221,55 @@ export function AiReviewPanel({ context, data }: PluginComponentProps) {
 
     async function loadReview() {
       try {
-        const jobs = await context.jobs!.getJobs('completed', 10);
-        const reviewJob = jobs.find(
-          (j) =>
-            j.type === 'ai-review' &&
-            (j.result as Record<string, unknown>)?.data &&
-            ((j.result as Record<string, unknown>).data as AiReviewData)?.submissionId === submissionId
+        // Fetch completed jobs for this plugin and submission
+        const completedRes = await fetch(
+          `/api/plugins/${context.pluginId}/jobs?status=completed&submissionId=${submissionId}&limit=10`
         );
 
         if (cancelled) return;
 
-        if (reviewJob?.result) {
-          const result = reviewJob.result as { data?: AiReviewData };
-          if (result.data) {
-            setReviewData(result.data);
+        if (completedRes.ok) {
+          const { jobs } = await completedRes.json();
+          const reviewJob = (jobs as Array<Record<string, unknown>>).find(
+            (j) =>
+              j.type === 'ai-review' &&
+              (j.result as Record<string, unknown>)?.data
+          );
+
+          if (reviewJob?.result) {
+            const result = reviewJob.result as { data?: AiReviewData };
+            if (result.data) {
+              setReviewData(result.data);
+              if (!cancelled) setLoading(false);
+              return;
+            }
           }
         }
 
-        if (!reviewJob) {
-          const pendingJobs = await context.jobs!.getJobs('pending', 10);
-          const runningJobs = await context.jobs!.getJobs('running', 10);
-          const allPending = [...pendingJobs, ...runningJobs];
-          const hasPending = allPending.some(
-            (j) =>
-              j.type === 'ai-review' &&
-              (j.payload as Record<string, unknown>)?.submissionId === submissionId
-          );
+        // Check for pending/running jobs
+        const pendingRes = await fetch(
+          `/api/plugins/${context.pluginId}/jobs?status=pending&submissionId=${submissionId}&limit=10`
+        );
+        const runningRes = await fetch(
+          `/api/plugins/${context.pluginId}/jobs?status=running&submissionId=${submissionId}&limit=10`
+        );
 
-          if (cancelled) return;
+        if (cancelled) return;
 
-          if (hasPending) {
-            setError('AI review is still processing...');
-          }
+        const pendingData = pendingRes.ok ? await pendingRes.json() : { jobs: [] };
+        const runningData = runningRes.ok ? await runningRes.json() : { jobs: [] };
+        const allPending = [
+          ...(pendingData.jobs as Array<Record<string, unknown>>),
+          ...(runningData.jobs as Array<Record<string, unknown>>),
+        ];
+        const hasPending = allPending.some(
+          (j) => j.type === 'ai-review'
+        );
+
+        if (cancelled) return;
+
+        if (hasPending) {
+          setError('AI review is still processing...');
         }
       } catch (err) {
         if (cancelled) return;
@@ -269,7 +286,7 @@ export function AiReviewPanel({ context, data }: PluginComponentProps) {
     return () => {
       cancelled = true;
     };
-  }, [submissionId, context.jobs]);
+  }, [submissionId, context.pluginId]);
 
   if (!submissionId) return null;
 

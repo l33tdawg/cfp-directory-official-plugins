@@ -58,7 +58,7 @@ export interface AiAnalysisResult {
   recommendation: string;
   confidence: number;
   similarSubmissions?: SimilarSubmission[];
-  rawResponse: string;
+  rawResponse?: string; // only present during processing, stripped before storage
   parseAttempts: number;
   repairApplied: boolean;
   analyzedAt: string;
@@ -190,6 +190,13 @@ interface RawAiResponse {
 }
 
 // =============================================================================
+// CONSTANTS
+// =============================================================================
+
+/** Default re-review cooldown in milliseconds (5 minutes) */
+const DEFAULT_RE_REVIEW_COOLDOWN_MS = 5 * 60 * 1000;
+
+// =============================================================================
 // PLUGIN DEFINITION
 // =============================================================================
 
@@ -259,14 +266,56 @@ const plugin: Plugin = {
       if (!hasContentChanges) return;
       if (config.autoReview === false || !config.apiKey) return;
 
+      const submissionId = payload.submission.id;
+
+      // Check cooldown: skip if last review was too recent
+      const cooldownMs =
+        ((config as Record<string, unknown>).reReviewCooldownMinutes as number | undefined)
+          ? ((config as Record<string, unknown>).reReviewCooldownMinutes as number) * 60 * 1000
+          : DEFAULT_RE_REVIEW_COOLDOWN_MS;
+
+      const lastReviewKey = `last-review-${submissionId}`;
+      const lastReviewTime = await ctx.data.get<number>('reviews', lastReviewKey);
+
+      if (lastReviewTime && Date.now() - lastReviewTime < cooldownMs) {
+        ctx.logger.debug('Skipping re-review: within cooldown period', {
+          submissionId,
+          cooldownMs,
+          lastReviewAge: Date.now() - lastReviewTime,
+        });
+        return;
+      }
+
+      // Cancel any existing pending ai-review jobs for this submission
+      try {
+        const pendingJobs = await ctx.jobs!.getJobs('pending');
+        for (const job of pendingJobs) {
+          if (
+            job.type === 'ai-review' &&
+            (job.payload as Record<string, unknown>)?.submissionId === submissionId
+          ) {
+            await ctx.jobs!.cancelJob(job.id);
+            ctx.logger.debug('Cancelled superseded pending ai-review job', {
+              jobId: job.id,
+              submissionId,
+            });
+          }
+        }
+      } catch {
+        ctx.logger.warn('Failed to cancel existing pending jobs for submission', { submissionId });
+      }
+
+      // Record enqueue timestamp
+      await ctx.data.set('reviews', lastReviewKey, Date.now());
+
       ctx.logger.info('Queuing AI re-review for updated submission', {
-        submissionId: payload.submission.id,
+        submissionId,
       });
 
       await ctx.jobs!.enqueue({
         type: 'ai-review',
         payload: {
-          submissionId: payload.submission.id,
+          submissionId,
           eventId: (payload.submission as Record<string, unknown>).eventId || null,
           title: payload.submission.title,
           abstract: payload.submission.abstract,
@@ -387,11 +436,14 @@ export async function handleAiReviewJob(
       confidence: result.confidence,
     });
 
+    // Strip rawResponse before persisting to job results
+    const { rawResponse: _raw, ...sanitizedAnalysis } = result;
+
     return {
       success: true,
       data: {
         submissionId,
-        analysis: result,
+        analysis: sanitizedAnalysis,
         analyzedAt: result.analyzedAt,
         provider: config.aiProvider || 'openai',
         model: config.model || 'gpt-4o',

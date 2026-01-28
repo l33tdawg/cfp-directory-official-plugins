@@ -117,6 +117,14 @@
         "title": "Auto-Review New Submissions",
         "description": "Automatically trigger AI review when a new submission is created",
         "default": true
+      },
+      "reReviewCooldownMinutes": {
+        "type": "number",
+        "title": "Re-review Cooldown (minutes)",
+        "description": "Minimum wait between AI re-reviews for the same submission",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 60
       }
     },
     "required": ["apiKey"]

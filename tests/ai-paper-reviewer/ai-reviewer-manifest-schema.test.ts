@@ -237,8 +237,52 @@ describe('Manifest configSchema extensions', () => {
   // -----------------------------------------------------------------------
 
   describe('version', () => {
-    it('manifest version is 1.3.0', () => {
-      expect(manifest.version).toBe('1.3.0');
+    it('manifest version is 1.3.1', () => {
+      expect(manifest.version).toBe('1.3.1');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // sidebarItems
+  // -----------------------------------------------------------------------
+
+  describe('sidebarItems', () => {
+    it('defines sidebarItems at manifest root', () => {
+      expect(manifest.sidebarItems).toBeDefined();
+      expect(Array.isArray(manifest.sidebarItems)).toBe(true);
+    });
+
+    it('has one section with title "AI Reviews"', () => {
+      expect(manifest.sidebarItems).toHaveLength(1);
+      expect(manifest.sidebarItems[0].title).toBe('AI Reviews');
+    });
+
+    it('section has Bot icon', () => {
+      expect(manifest.sidebarItems[0].icon).toBe('Bot');
+    });
+
+    it('section has two items', () => {
+      expect(manifest.sidebarItems[0].items).toHaveLength(2);
+    });
+
+    it('includes Review History item with correct properties', () => {
+      const historyItem = manifest.sidebarItems[0].items.find(
+        (item: { key: string }) => item.key === 'history'
+      );
+      expect(historyItem).toBeDefined();
+      expect(historyItem.label).toBe('Review History');
+      expect(historyItem.path).toBe('/history');
+      expect(historyItem.icon).toBe('History');
+    });
+
+    it('includes Reviewer Personas item with correct properties', () => {
+      const personasItem = manifest.sidebarItems[0].items.find(
+        (item: { key: string }) => item.key === 'personas'
+      );
+      expect(personasItem).toBeDefined();
+      expect(personasItem.label).toBe('Reviewer Personas');
+      expect(personasItem.path).toBe('/personas');
+      expect(personasItem.icon).toBe('Sparkles');
     });
   });
 

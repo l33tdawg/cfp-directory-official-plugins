@@ -6,7 +6,7 @@ Official plugin repository for [CFP Directory](https://github.com/l33tdawg/cfp-d
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [AI Paper Reviewer](plugins/ai-paper-reviewer/) | 1.3.0 | Intelligent submission analysis with event-aware criteria, duplicate detection, confidence thresholds, admin review history, and persona configuration |
+| [AI Paper Reviewer](plugins/ai-paper-reviewer/) | 1.3.1 | Intelligent submission analysis with event-aware criteria, duplicate detection, confidence thresholds, admin review history, and persona configuration |
 
 ## How It Works
 

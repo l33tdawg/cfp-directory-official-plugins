@@ -1,7 +1,7 @@
 {
   "name": "ai-paper-reviewer",
   "displayName": "AI Paper Reviewer",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "apiVersion": "1.0",
   "description": "Intelligent submission analysis with event-aware criteria, duplicate detection, and confidence thresholds",
   "author": "CFP Directory",
@@ -14,6 +14,26 @@
   "hooks": [
     "submission.created",
     "submission.updated"
+  ],
+  "sidebarItems": [
+    {
+      "title": "AI Reviews",
+      "icon": "Bot",
+      "items": [
+        {
+          "key": "history",
+          "label": "Review History",
+          "path": "/history",
+          "icon": "History"
+        },
+        {
+          "key": "personas",
+          "label": "Reviewer Personas",
+          "path": "/personas",
+          "icon": "Sparkles"
+        }
+      ]
+    }
   ],
   "configSchema": {
     "type": "object",

@@ -1,0 +1,15 @@
+{
+  "name": "cfp-directory-official-plugins",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Official plugins for CFP Directory",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "bash scripts/build-archives.sh"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0",
+    "typescript": "^5.7.0"
+  }
+}

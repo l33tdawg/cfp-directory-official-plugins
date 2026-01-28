@@ -1,7 +1,7 @@
 {
   "name": "ai-paper-reviewer",
   "displayName": "AI Paper Reviewer",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "apiVersion": "1.0",
   "description": "Intelligent submission analysis with event-aware criteria, duplicate detection, and confidence thresholds",
   "author": "CFP Directory",
@@ -17,25 +17,53 @@
   ],
   "configSchema": {
     "type": "object",
+    "x-groups": {
+      "provider": { "title": "AI Provider & Model", "description": "Choose your AI service and model", "order": 0 },
+      "review": { "title": "Review Behavior", "description": "Control how reviews are generated", "order": 1 },
+      "quality": { "title": "Quality Controls", "description": "Fine-tune output quality and confidence", "order": 2 },
+      "automation": { "title": "Automation", "description": "Automatic review triggers and cooldowns", "order": 3 },
+      "detection": { "title": "Advanced Detection", "description": "Duplicate detection and speaker research", "order": 4 }
+    },
     "properties": {
       "aiProvider": {
         "type": "string",
         "title": "AI Provider",
         "description": "The AI provider to use for paper analysis",
         "enum": ["openai", "anthropic", "gemini"],
-        "default": "openai"
+        "default": "openai",
+        "x-group": "provider",
+        "x-friendly-hint": "Choose your AI service. All three produce high-quality reviews."
       },
       "apiKey": {
         "type": "string",
         "title": "API Key",
         "description": "API key for the selected AI provider",
-        "format": "password"
+        "format": "password",
+        "x-group": "provider",
+        "x-friendly-hint": "Paste the API key from your provider's dashboard. This is stored encrypted and never shared."
       },
       "model": {
         "type": "string",
         "title": "Model",
-        "description": "The AI model to use (options depend on provider)",
-        "default": "gpt-4o"
+        "description": "The AI model to use for reviews",
+        "default": "gpt-4o",
+        "x-group": "provider",
+        "x-depends-on": "aiProvider",
+        "x-friendly-hint": "Each provider offers models that balance quality, speed, and cost. The recommended option works well for most teams.",
+        "x-options": {
+          "openai": [
+            { "value": "gpt-4o", "label": "GPT-4o (Recommended)", "description": "Best balance of quality and speed" },
+            { "value": "gpt-4o-mini", "label": "GPT-4o Mini", "description": "Faster and more affordable" }
+          ],
+          "anthropic": [
+            { "value": "claude-sonnet-4-20250514", "label": "Claude Sonnet 4 (Recommended)", "description": "Great balance of quality and speed" },
+            { "value": "claude-haiku-4-20250514", "label": "Claude Haiku 4", "description": "Fastest and most affordable" }
+          ],
+          "gemini": [
+            { "value": "gemini-2.0-flash", "label": "Gemini 2.0 Flash (Recommended)", "description": "Fast and capable" },
+            { "value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro", "description": "Most capable Gemini model" }
+          ]
+        }
       },
       "temperature": {
         "type": "number",
@@ -43,7 +71,11 @@
         "description": "0.0 = consistent, 1.0 = creative",
         "default": 0.3,
         "minimum": 0,
-        "maximum": 1
+        "maximum": 1,
+        "x-group": "quality",
+        "x-display": "slider",
+        "x-labels": { "0": "Consistent", "0.5": "Balanced", "1": "Creative" },
+        "x-friendly-hint": "Lower values produce more consistent reviews. Higher values give more varied feedback. The default (0.3) works well for most teams."
       },
       "maxTokens": {
         "type": "number",
@@ -51,37 +83,49 @@
         "description": "Maximum tokens for AI response",
         "default": 2000,
         "minimum": 500,
-        "maximum": 8000
+        "maximum": 8000,
+        "x-group": "quality",
+        "x-friendly-hint": "Controls review length. The default produces thorough but concise reviews. Increase for more detailed feedback."
       },
       "useEventCriteria": {
         "type": "boolean",
         "title": "Use Event Review Criteria",
         "description": "When enabled, uses the event's configured review criteria and weights",
-        "default": true
+        "default": true,
+        "x-group": "review",
+        "x-friendly-hint": "When enabled, the AI will tailor its review to your event's specific criteria and scoring weights."
       },
       "strictnessLevel": {
         "type": "string",
         "title": "Review Strictness",
         "description": "Controls how strict the AI reviewer is",
         "enum": ["lenient", "moderate", "strict"],
-        "default": "moderate"
+        "default": "moderate",
+        "x-group": "review",
+        "x-friendly-hint": "Lenient is encouraging and constructive. Strict holds submissions to a high bar. Moderate balances both."
       },
       "reviewFocus": {
         "type": "array",
         "title": "Review Focus Areas",
         "items": { "type": "string" },
-        "default": ["constructive", "balanced"]
+        "default": ["constructive", "balanced"],
+        "x-group": "review",
+        "x-friendly-hint": "Tags that guide the AI's review style. 'constructive' emphasizes improvement suggestions, 'balanced' ensures fair coverage of strengths and weaknesses."
       },
       "customPersona": {
         "type": "string",
         "title": "Custom Persona (Optional)",
-        "description": "Additional persona instructions for the AI reviewer"
+        "description": "Additional persona instructions for the AI reviewer",
+        "x-group": "review",
+        "x-friendly-hint": "Optional free-text instructions to customize the AI's reviewing style. For example: 'Focus on practical applicability' or 'Be especially thorough with methodology sections.'"
       },
       "enableDuplicateDetection": {
         "type": "boolean",
         "title": "Duplicate Detection",
         "description": "Check for similar submissions in the same event",
-        "default": true
+        "default": true,
+        "x-group": "detection",
+        "x-friendly-hint": "When enabled, the AI checks for similar submissions in the same event and flags potential duplicates."
       },
       "duplicateThreshold": {
         "type": "number",
@@ -89,13 +133,19 @@
         "description": "Flag submissions above this similarity (0.0-1.0)",
         "default": 0.7,
         "minimum": 0.5,
-        "maximum": 0.95
+        "maximum": 0.95,
+        "x-group": "detection",
+        "x-display": "slider",
+        "x-labels": { "0.5": "Loose", "0.7": "Default", "0.95": "Strict" },
+        "x-friendly-hint": "Lower values catch more potential duplicates but may flag unrelated submissions. Higher values only flag very similar content."
       },
       "enableSpeakerResearch": {
         "type": "boolean",
         "title": "Speaker Research",
         "description": "Research speaker background (requires additional API calls)",
-        "default": false
+        "default": false,
+        "x-group": "detection",
+        "x-friendly-hint": "When enabled, the AI considers the speaker's background in its review. Uses additional API calls which may increase costs."
       },
       "confidenceThreshold": {
         "type": "number",
@@ -103,20 +153,28 @@
         "description": "Hide recommendations below this confidence level",
         "default": 0.6,
         "minimum": 0,
-        "maximum": 1
+        "maximum": 1,
+        "x-group": "quality",
+        "x-display": "slider",
+        "x-labels": { "0": "Show all", "0.5": "Default", "1": "High only" },
+        "x-friendly-hint": "Reviews below this confidence level will be flagged. Increase if you want only high-certainty AI recommendations."
       },
       "lowConfidenceBehavior": {
         "type": "string",
         "title": "Low Confidence Behavior",
         "description": "What to do when AI confidence is below threshold",
         "enum": ["hide", "warn", "require_override"],
-        "default": "warn"
+        "default": "warn",
+        "x-group": "quality",
+        "x-friendly-hint": "'Hide' suppresses low-confidence reviews. 'Warn' shows them with a warning badge. 'Require override' needs admin approval to make them visible."
       },
       "autoReview": {
         "type": "boolean",
         "title": "Auto-Review New Submissions",
         "description": "Automatically trigger AI review when a new submission is created",
-        "default": true
+        "default": true,
+        "x-group": "automation",
+        "x-friendly-hint": "When enabled, every new submission automatically gets an AI review. Disable to only review on demand."
       },
       "reReviewCooldownMinutes": {
         "type": "number",
@@ -124,7 +182,9 @@
         "description": "Minimum wait between AI re-reviews for the same submission",
         "default": 5,
         "minimum": 1,
-        "maximum": 60
+        "maximum": 60,
+        "x-group": "automation",
+        "x-friendly-hint": "Prevents the AI from re-reviewing a submission too quickly when the author makes rapid edits. The default (5 minutes) works for most cases."
       }
     },
     "required": ["apiKey"]

@@ -10,6 +10,9 @@
 
 import type { Plugin, PluginContext, PluginManifest } from '@/lib/plugins';
 import { AiReviewPanel } from './components/ai-review-panel';
+import { AiReviewerSidebarItem } from './components/admin-sidebar-item';
+import { AdminReviewHistory } from './components/admin-review-history';
+import { AdminPersonas } from './components/admin-personas';
 import { buildSystemPrompt } from './lib/prompts';
 import type { ReviewCriterion, SimilarSubmissionInfo, EventContext } from './lib/prompts';
 import { callProvider } from './lib/providers';
@@ -333,6 +336,24 @@ const plugin: Plugin = {
       slot: 'submission.review.panel',
       component: AiReviewPanel,
       order: 50,
+    },
+    {
+      slot: 'admin.sidebar.items',
+      component: AiReviewerSidebarItem,
+      order: 100,
+    },
+  ],
+
+  adminPages: [
+    {
+      path: '/history',
+      title: 'Review History',
+      component: AdminReviewHistory,
+    },
+    {
+      path: '/personas',
+      title: 'Reviewer Personas',
+      component: AdminPersonas,
     },
   ],
 };

@@ -31,7 +31,7 @@ describe('Manifest configSchema extensions', () => {
     });
 
     it('each group has title, description, and order', () => {
-      for (const [key, group] of Object.entries(schema['x-groups'])) {
+      for (const [_key, group] of Object.entries(schema['x-groups'])) {
         expect(group).toHaveProperty('title');
         expect(group).toHaveProperty('description');
         expect(group).toHaveProperty('order');
@@ -89,7 +89,7 @@ describe('Manifest configSchema extensions', () => {
 
   describe('x-friendly-hint', () => {
     it('all properties have x-friendly-hint', () => {
-      for (const [key, prop] of Object.entries(properties)) {
+      for (const [_key, prop] of Object.entries(properties)) {
         expect(prop).toHaveProperty('x-friendly-hint');
         expect(typeof prop['x-friendly-hint']).toBe('string');
         expect(prop['x-friendly-hint'].length).toBeGreaterThan(10);
@@ -126,14 +126,14 @@ describe('Manifest configSchema extensions', () => {
     });
 
     it('each provider has at least one model option', () => {
-      for (const [provider, options] of Object.entries(modelProp['x-options'])) {
+      for (const [_provider, options] of Object.entries(modelProp['x-options'])) {
         expect(Array.isArray(options)).toBe(true);
         expect(options.length).toBeGreaterThanOrEqual(1);
       }
     });
 
     it('each model option has value and label', () => {
-      for (const [provider, options] of Object.entries(modelProp['x-options'])) {
+      for (const [_provider, options] of Object.entries(modelProp['x-options'])) {
         for (const option of options) {
           expect(option).toHaveProperty('value');
           expect(option).toHaveProperty('label');
@@ -144,7 +144,7 @@ describe('Manifest configSchema extensions', () => {
     });
 
     it('each model option has a description', () => {
-      for (const [provider, options] of Object.entries(modelProp['x-options'])) {
+      for (const [_provider, options] of Object.entries(modelProp['x-options'])) {
         for (const option of options) {
           expect(option).toHaveProperty('description');
           expect(typeof option.description).toBe('string');
@@ -153,7 +153,7 @@ describe('Manifest configSchema extensions', () => {
     });
 
     it('first option per provider has "(Recommended)" in label', () => {
-      for (const [provider, options] of Object.entries(modelProp['x-options'])) {
+      for (const [_provider, options] of Object.entries(modelProp['x-options'])) {
         expect(options[0].label).toContain('(Recommended)');
       }
     });
@@ -237,8 +237,8 @@ describe('Manifest configSchema extensions', () => {
   // -----------------------------------------------------------------------
 
   describe('version', () => {
-    it('manifest version is 1.2.0', () => {
-      expect(manifest.version).toBe('1.2.0');
+    it('manifest version is 1.3.0', () => {
+      expect(manifest.version).toBe('1.3.0');
     });
   });
 
@@ -260,7 +260,7 @@ describe('Manifest configSchema extensions', () => {
     });
 
     it('all properties have type and title', () => {
-      for (const [key, prop] of Object.entries(properties)) {
+      for (const [_key, prop] of Object.entries(properties)) {
         expect(prop).toHaveProperty('type');
         expect(prop).toHaveProperty('title');
       }

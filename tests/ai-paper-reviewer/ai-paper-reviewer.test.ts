@@ -2,7 +2,6 @@
  * AI Paper Reviewer Plugin Tests
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock Prisma before imports
@@ -580,11 +579,30 @@ describe('AI Paper Reviewer Plugin', () => {
       expect(plugin.manifest.permissions).toContain('events:read');
     });
 
-    it('should register a component for submission.review.panel slot', async () => {
+    it('should register components for slots', async () => {
       const plugin = (await import('../../plugins/ai-paper-reviewer/index')).default;
-      expect(plugin.components).toHaveLength(1);
-      expect(plugin.components![0].slot).toBe('submission.review.panel');
-      expect(plugin.components![0].order).toBe(50);
+      expect(plugin.components).toHaveLength(2);
+
+      const reviewPanelComponent = plugin.components!.find(c => c.slot === 'submission.review.panel');
+      expect(reviewPanelComponent).toBeDefined();
+      expect(reviewPanelComponent!.order).toBe(50);
+
+      const sidebarComponent = plugin.components!.find(c => c.slot === 'admin.sidebar.items');
+      expect(sidebarComponent).toBeDefined();
+      expect(sidebarComponent!.order).toBe(100);
+    });
+
+    it('should register admin pages', async () => {
+      const plugin = (await import('../../plugins/ai-paper-reviewer/index')).default;
+      expect(plugin.adminPages).toHaveLength(2);
+
+      const historyPage = plugin.adminPages!.find(p => p.path === '/history');
+      expect(historyPage).toBeDefined();
+      expect(historyPage!.title).toBe('Review History');
+
+      const personasPage = plugin.adminPages!.find(p => p.path === '/personas');
+      expect(personasPage).toBeDefined();
+      expect(personasPage!.title).toBe('Reviewer Personas');
     });
 
     it('should queue AI review job on submission.created with eventId', async () => {

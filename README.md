@@ -6,7 +6,7 @@ Official plugin repository for [CFP Directory](https://github.com/l33tdawg/cfp-d
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [AI Paper Reviewer](plugins/ai-paper-reviewer/) | 1.1.0 | Intelligent submission analysis with event-aware criteria, duplicate detection, and confidence thresholds |
+| [AI Paper Reviewer](plugins/ai-paper-reviewer/) | 1.3.0 | Intelligent submission analysis with event-aware criteria, duplicate detection, confidence thresholds, admin review history, and persona configuration |
 
 ## How It Works
 
@@ -34,7 +34,10 @@ cfp-directory-official-plugins/
 │       ├── manifest.json
 │       ├── index.ts
 │       ├── components/
-│       │   └── ai-review-panel.tsx
+│       │   ├── ai-review-panel.tsx
+│       │   ├── admin-sidebar-item.tsx
+│       │   ├── admin-review-history.tsx
+│       │   └── admin-personas.tsx
 │       └── lib/
 │           ├── prompts.ts
 │           ├── providers.ts
@@ -75,4 +78,4 @@ This produces a zip for each plugin in the `dist/` directory. Attach the zip to 
 
 ## License
 
-MIT
+Apache License 2.0 - See [LICENSE](LICENSE) for details.

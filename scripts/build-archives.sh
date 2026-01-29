@@ -15,6 +15,11 @@ DIST_DIR="$REPO_ROOT/dist"
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
+# Build admin components first
+echo "Building admin components..."
+node "$REPO_ROOT/scripts/build-admin-components.js"
+echo ""
+
 echo "Building plugin archives..."
 
 for plugin_dir in "$PLUGINS_DIR"/*/; do

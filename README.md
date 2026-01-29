@@ -38,17 +38,22 @@ cfp-directory-official-plugins/
 │       │   ├── admin-sidebar-item.tsx
 │       │   ├── admin-review-history.tsx
 │       │   └── admin-personas.tsx
-│       └── lib/
-│           ├── prompts.ts
-│           ├── providers.ts
-│           ├── json-repair.ts
-│           └── similarity.ts
+│       ├── lib/
+│       │   ├── prompts.ts
+│       │   ├── providers.ts
+│       │   ├── json-repair.ts
+│       │   └── similarity.ts
+│       └── dist/                    # Pre-compiled admin bundles (generated)
+│           ├── admin-pages.js
+│           ├── admin-pages.js.map
+│           └── admin-pages.manifest.json
 ├── tests/
 │   └── ai-paper-reviewer/          # Plugin tests
 ├── docs/
 │   └── ai-paper-reviewer.md        # Extended documentation
 └── scripts/
-    └── build-archives.sh           # Builds release zips
+    ├── build-archives.sh           # Builds release zips
+    └── build-admin-components.js   # Compiles admin page components
 ```
 
 ## Building Release Archives
@@ -56,10 +61,24 @@ cfp-directory-official-plugins/
 To create zip archives for a GitHub release:
 
 ```bash
-./scripts/build-archives.sh
+npm run build
 ```
 
-This produces a zip for each plugin in the `dist/` directory. Attach the zip to a GitHub release matching the `downloadUrl` pattern in `registry.json`.
+This runs two steps:
+1. **Compiles admin components** - Uses esbuild to bundle admin page components (`components/admin-*.tsx`) into browser-ready JavaScript (`dist/admin-pages.js`). These bundles use the host app's React instance via window globals.
+2. **Creates zip archives** - Packages each plugin (including the compiled bundles) into `dist/<plugin-name>.zip`
+
+Attach the zip to a GitHub release matching the `downloadUrl` pattern in `registry.json`.
+
+### Admin Component Compilation
+
+Plugin admin pages (like Review History and Personas) use React hooks and need to run client-side. The build process:
+- Compiles TypeScript/JSX to browser-ready IIFE bundles
+- Replaces React imports with `window.__PLUGIN_REACT__` (provided by host app)
+- Bundles dependencies like lucide-react icons
+- Generates a manifest listing available components
+
+This allows plugins to provide interactive admin UIs without requiring runtime transpilation.
 
 ## Creating a Release
 

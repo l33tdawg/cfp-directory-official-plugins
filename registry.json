@@ -19,6 +19,24 @@
         "submission.updated"
       ],
       "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/v1.4.0/ai-paper-reviewer.zip"
+    },
+    {
+      "name": "example-webhook",
+      "displayName": "Example: Webhook Notifications",
+      "version": "1.0.0",
+      "apiVersion": "1.0",
+      "description": "A starter template for plugin developers. Demonstrates hooks, configuration schemas, HMAC signatures, and background job retries. Use this as a base for building your own plugins.",
+      "author": "CFP Directory",
+      "homepage": "https://github.com/l33tdawg/cfp-directory-official-plugins/tree/main/plugins/example-webhook",
+      "permissions": [
+        "submissions:read"
+      ],
+      "hooks": [
+        "submission.created",
+        "submission.statusChanged",
+        "review.submitted"
+      ],
+      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/example-webhook-v1.0.0/example-webhook.zip"
     }
   ]
 }

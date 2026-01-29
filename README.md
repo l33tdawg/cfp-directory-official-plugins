@@ -22,7 +22,15 @@ The CFP Directory admin panel includes a **Plugins Gallery** that fetches `regis
 
 ### For Plugin Developers
 
-See the [CFP Directory Plugin SDK documentation](https://github.com/l33tdawg/cfp-directory-self-hosted) for details on building plugins. The main repo includes example plugins (`example-logger` and `example-webhook`) to get started.
+See the [Plugin SDK Guide](https://github.com/l33tdawg/cfp-directory-self-hosted/blob/main/docs/PLUGIN-SDK.md) for comprehensive documentation on building plugins, including:
+- Manifest format and configuration schemas
+- Hooks API (submission, review, event, email lifecycle events)
+- Capabilities (submissions, users, reviews, events, storage, email, data store)
+- Background jobs with retry support
+- UI extension slots and admin pages
+- Service account creation
+
+Use the `example-webhook` plugin in this repo as a starter template.
 
 ## Repository Structure
 

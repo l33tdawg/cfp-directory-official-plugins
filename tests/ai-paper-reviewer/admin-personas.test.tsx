@@ -17,6 +17,11 @@ vi.mock('lucide-react', () => ({
   CheckCircle: () => <span data-testid="icon-check" />,
   AlertTriangle: () => <span data-testid="icon-alert" />,
   Loader2: ({ className }: any) => <span data-testid="icon-loader" className={className} />,
+  BookOpen: () => <span data-testid="icon-book" />,
+  Lightbulb: () => <span data-testid="icon-lightbulb" />,
+  Scale: () => <span data-testid="icon-scale" />,
+  Cpu: () => <span data-testid="icon-cpu" />,
+  Info: () => <span data-testid="icon-info" />,
 }));
 
 // Mock plugin types
@@ -113,10 +118,10 @@ describe('AdminPersonas', () => {
     await user.click(screen.getByTestId('save-button'));
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/plugins/plugin-123/config',
+      '/api/admin/plugins/plugin-123',
       expect.objectContaining({
         method: 'PATCH',
-        body: JSON.stringify({ customPersona: 'New persona' }),
+        body: JSON.stringify({ config: { customPersona: 'New persona' } }),
       })
     );
   });

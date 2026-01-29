@@ -11,6 +11,7 @@
 import type { Plugin, PluginContext, PluginManifest } from '@/lib/plugins';
 import { AiReviewPanel } from './components/ai-review-panel';
 import { AiReviewerSidebarItem } from './components/admin-sidebar-item';
+import { AdminDashboard } from './components/admin-dashboard';
 import { AdminReviewHistory } from './components/admin-review-history';
 import { AdminPersonas } from './components/admin-personas';
 import { buildSystemPrompt } from './lib/prompts';
@@ -345,6 +346,11 @@ const plugin: Plugin = {
   ],
 
   adminPages: [
+    {
+      path: '/',
+      title: 'Dashboard',
+      component: AdminDashboard,
+    },
     {
       path: '/history',
       title: 'Review History',

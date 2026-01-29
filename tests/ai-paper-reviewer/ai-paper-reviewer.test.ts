@@ -594,7 +594,11 @@ describe('AI Paper Reviewer Plugin', () => {
 
     it('should register admin pages', async () => {
       const plugin = (await import('../../plugins/ai-paper-reviewer/index')).default;
-      expect(plugin.adminPages).toHaveLength(2);
+      expect(plugin.adminPages).toHaveLength(3);
+
+      const dashboardPage = plugin.adminPages!.find(p => p.path === '/');
+      expect(dashboardPage).toBeDefined();
+      expect(dashboardPage!.title).toBe('Dashboard');
 
       const historyPage = plugin.adminPages!.find(p => p.path === '/history');
       expect(historyPage).toBeDefined();

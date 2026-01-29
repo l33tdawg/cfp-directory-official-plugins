@@ -19,6 +19,8 @@ vi.mock('lucide-react', () => ({
   AlertTriangle: () => <span data-testid="icon-alert" />,
   CheckCircle: () => <span data-testid="icon-check" />,
   XCircle: () => <span data-testid="icon-x" />,
+  TrendingUp: () => <span data-testid="icon-trending" />,
+  FileText: () => <span data-testid="icon-file" />,
 }));
 
 // Mock plugin types
@@ -191,8 +193,9 @@ describe('AdminReviewHistory', () => {
     });
 
     expect(screen.getByText('Good submission')).toBeInTheDocument();
-    expect(screen.getByText(/Clear, Well-structured/)).toBeInTheDocument();
-    expect(screen.getByText(/Missing examples/)).toBeInTheDocument();
+    expect(screen.getByText('Clear')).toBeInTheDocument();
+    expect(screen.getByText('Well-structured')).toBeInTheDocument();
+    expect(screen.getByText('Missing examples')).toBeInTheDocument();
   });
 
   it('should show error for failed jobs in details', async () => {
@@ -250,7 +253,7 @@ describe('AdminReviewHistory', () => {
     render(<AdminReviewHistory context={mockContext} data={{}} />);
 
     await waitFor(() => {
-      expect(screen.getByText('No AI reviews have been completed yet.')).toBeInTheDocument();
+      expect(screen.getByText('No reviews yet')).toBeInTheDocument();
     });
   });
 });

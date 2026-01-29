@@ -237,8 +237,8 @@ describe('Manifest configSchema extensions', () => {
   // -----------------------------------------------------------------------
 
   describe('version', () => {
-    it('manifest version is 1.3.1', () => {
-      expect(manifest.version).toBe('1.3.1');
+    it('manifest version is 1.5.0', () => {
+      expect(manifest.version).toBe('1.5.0');
     });
   });
 
@@ -261,8 +261,18 @@ describe('Manifest configSchema extensions', () => {
       expect(manifest.sidebarItems[0].icon).toBe('Bot');
     });
 
-    it('section has two items', () => {
-      expect(manifest.sidebarItems[0].items).toHaveLength(2);
+    it('section has three items', () => {
+      expect(manifest.sidebarItems[0].items).toHaveLength(3);
+    });
+
+    it('includes Dashboard item with correct properties', () => {
+      const dashboardItem = manifest.sidebarItems[0].items.find(
+        (item: { key: string }) => item.key === 'dashboard'
+      );
+      expect(dashboardItem).toBeDefined();
+      expect(dashboardItem.label).toBe('Dashboard');
+      expect(dashboardItem.path).toBe('/');
+      expect(dashboardItem.icon).toBe('LayoutDashboard');
     });
 
     it('includes Review History item with correct properties', () => {

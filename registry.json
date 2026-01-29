@@ -4,21 +4,23 @@
     {
       "name": "ai-paper-reviewer",
       "displayName": "AI Paper Reviewer",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "apiVersion": "1.0",
-      "description": "Intelligent submission analysis with event-aware criteria, duplicate detection, confidence thresholds, admin review history, and persona configuration",
+      "description": "Intelligent submission analysis with event-aware criteria, duplicate detection, confidence thresholds, core review integration, and service account support",
       "author": "CFP Directory",
       "homepage": "https://github.com/l33tdawg/cfp-directory-official-plugins/tree/main/plugins/ai-paper-reviewer",
       "permissions": [
         "submissions:read",
         "reviews:write",
-        "events:read"
+        "reviews:read",
+        "events:read",
+        "users:manage"
       ],
       "hooks": [
         "submission.created",
         "submission.updated"
       ],
-      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/ai-paper-reviewer-v1.5.0/ai-paper-reviewer.zip"
+      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/ai-paper-reviewer-v1.6.0/ai-paper-reviewer.zip"
     },
     {
       "name": "example-webhook",

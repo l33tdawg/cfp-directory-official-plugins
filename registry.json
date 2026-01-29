@@ -4,7 +4,7 @@
     {
       "name": "ai-paper-reviewer",
       "displayName": "AI Paper Reviewer",
-      "version": "1.3.1",
+      "version": "1.4.0",
       "apiVersion": "1.0",
       "description": "Intelligent submission analysis with event-aware criteria, duplicate detection, confidence thresholds, admin review history, and persona configuration",
       "author": "CFP Directory",
@@ -18,7 +18,7 @@
         "submission.created",
         "submission.updated"
       ],
-      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/v1.3.1/ai-paper-reviewer.zip"
+      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/v1.4.0/ai-paper-reviewer.zip"
     }
   ]
 }

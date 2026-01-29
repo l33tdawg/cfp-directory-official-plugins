@@ -21,13 +21,14 @@ describe('Manifest configSchema extensions', () => {
       expect(schema['x-groups']).toBeDefined();
     });
 
-    it('has all five groups', () => {
+    it('has all six groups', () => {
       const groups = Object.keys(schema['x-groups']);
       expect(groups).toContain('provider');
       expect(groups).toContain('review');
       expect(groups).toContain('quality');
       expect(groups).toContain('automation');
       expect(groups).toContain('detection');
+      expect(groups).toContain('visibility');
     });
 
     it('each group has title, description, and order', () => {
@@ -44,7 +45,7 @@ describe('Manifest configSchema extensions', () => {
     it('groups have sequential order values', () => {
       const orders = Object.values(schema['x-groups']).map((g) => g.order);
       const sorted = [...orders].sort((a, b) => a - b);
-      expect(sorted).toEqual([0, 1, 2, 3, 4]);
+      expect(sorted).toEqual([0, 1, 2, 3, 4, 5]);
     });
   });
 
@@ -70,6 +71,7 @@ describe('Manifest configSchema extensions', () => {
       enableDuplicateDetection: 'detection',
       duplicateThreshold: 'detection',
       enableSpeakerResearch: 'detection',
+      showAiReviewerOnTeamPage: 'visibility',
     };
 
     it('every property has an x-group assignment', () => {
@@ -237,8 +239,8 @@ describe('Manifest configSchema extensions', () => {
   // -----------------------------------------------------------------------
 
   describe('version', () => {
-    it('manifest version is 1.5.0', () => {
-      expect(manifest.version).toBe('1.5.0');
+    it('manifest version is 1.6.0', () => {
+      expect(manifest.version).toBe('1.6.0');
     });
   });
 
@@ -309,8 +311,8 @@ describe('Manifest configSchema extensions', () => {
       expect(schema.required).toEqual(['apiKey']);
     });
 
-    it('has 16 properties', () => {
-      expect(Object.keys(properties).length).toBe(16);
+    it('has 17 properties', () => {
+      expect(Object.keys(properties).length).toBe(17);
     });
 
     it('all properties have type and title', () => {

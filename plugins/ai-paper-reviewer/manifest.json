@@ -1,15 +1,17 @@
 {
   "name": "ai-paper-reviewer",
   "displayName": "AI Paper Reviewer",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "apiVersion": "1.0",
-  "description": "Intelligent submission analysis with event-aware criteria, duplicate detection, and confidence thresholds",
+  "description": "Intelligent submission analysis with event-aware criteria, duplicate detection, confidence thresholds, and core review integration",
   "author": "CFP Directory",
   "homepage": "https://github.com/l33tdawg/cfp-directory-official-plugins/tree/main/plugins/ai-paper-reviewer",
   "permissions": [
     "submissions:read",
     "reviews:write",
-    "events:read"
+    "reviews:read",
+    "events:read",
+    "users:manage"
   ],
   "hooks": [
     "submission.created",
@@ -48,7 +50,8 @@
       "review": { "title": "Review Behavior", "description": "Control how reviews are generated", "order": 1 },
       "quality": { "title": "Quality Controls", "description": "Fine-tune output quality and confidence", "order": 2 },
       "automation": { "title": "Automation", "description": "Automatic review triggers and cooldowns", "order": 3 },
-      "detection": { "title": "Advanced Detection", "description": "Duplicate detection and speaker research", "order": 4 }
+      "detection": { "title": "Advanced Detection", "description": "Duplicate detection and speaker research", "order": 4 },
+      "visibility": { "title": "Visibility", "description": "Control how the AI reviewer appears to users", "order": 5 }
     },
     "properties": {
       "aiProvider": {
@@ -211,6 +214,14 @@
         "maximum": 60,
         "x-group": "automation",
         "x-friendly-hint": "Prevents the AI from re-reviewing a submission too quickly when the author makes rapid edits. The default (5 minutes) works for most cases."
+      },
+      "showAiReviewerOnTeamPage": {
+        "type": "boolean",
+        "title": "Show AI Reviewer on Team Page",
+        "description": "Display the AI reviewer on the public reviewers/team page",
+        "default": false,
+        "x-group": "visibility",
+        "x-friendly-hint": "When enabled, the AI reviewer will appear on the public team/reviewers page. Disable if you prefer speakers don't know their submissions are being reviewed by AI."
       }
     },
     "required": ["apiKey"]

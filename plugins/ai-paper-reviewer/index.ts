@@ -46,6 +46,10 @@ interface AiReviewerConfig {
   enableSpeakerResearch?: boolean;
   confidenceThreshold?: number;
   lowConfidenceBehavior?: 'hide' | 'warn' | 'require_override';
+  /** Show AI reviewer on public team/reviewers page */
+  showAiReviewerOnTeamPage?: boolean;
+  /** Re-review cooldown in minutes */
+  reReviewCooldownMinutes?: number;
 }
 
 // =============================================================================
@@ -209,6 +213,27 @@ const plugin: Plugin = {
 
   async onEnable(ctx: PluginContext) {
     const config = ctx.config as AiReviewerConfig;
+
+    // Create or retrieve the AI reviewer service account
+    try {
+      const serviceAccount = await ctx.users.createServiceAccount({
+        name: 'AI Paper Reviewer',
+        image: '/images/ai-reviewer-avatar.png', // Optional: plugin can provide its own avatar
+      });
+
+      // Store the service account ID for use in reviews
+      await ctx.data.set('config', 'service-account-id', serviceAccount.id);
+
+      ctx.logger.info('AI Paper Reviewer service account ready', {
+        userId: serviceAccount.id,
+        email: serviceAccount.email,
+      });
+    } catch (error) {
+      ctx.logger.error('Failed to create service account', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     if (!config.apiKey) {
       ctx.logger.warn('AI Paper Reviewer enabled without an API key - reviews will fail until configured');
     } else {
@@ -466,10 +491,84 @@ export async function handleAiReviewJob(
     // Strip rawResponse before persisting to job results
     const { rawResponse: _raw, ...sanitizedAnalysis } = result;
 
+    // 7. Create a review in the core reviews table
+    let reviewId: string | undefined;
+    try {
+      // Get the service account ID
+      const serviceAccountId = await ctx.data.get<string>('config', 'service-account-id');
+
+      if (serviceAccountId) {
+        // Map AI recommendation to ReviewRecommendation enum
+        const recommendationMap: Record<string, 'STRONG_ACCEPT' | 'ACCEPT' | 'NEUTRAL' | 'REJECT' | 'STRONG_REJECT'> = {
+          'STRONG_ACCEPT': 'STRONG_ACCEPT',
+          'ACCEPT': 'ACCEPT',
+          'NEUTRAL': 'NEUTRAL',
+          'REJECT': 'REJECT',
+          'STRONG_REJECT': 'STRONG_REJECT',
+        };
+        const mappedRecommendation = recommendationMap[result.recommendation.toUpperCase()] || 'NEUTRAL';
+
+        // Build detailed private notes with AI analysis
+        const privateNotes = [
+          `## AI Analysis Summary`,
+          result.summary,
+          '',
+          `### Strengths`,
+          ...result.strengths.map((s) => `- ${s}`),
+          '',
+          `### Weaknesses`,
+          ...result.weaknesses.map((w) => `- ${w}`),
+          '',
+          `### Suggestions`,
+          ...result.suggestions.map((s) => `- ${s}`),
+          '',
+          `---`,
+          `*Confidence: ${(result.confidence * 100).toFixed(0)}%*`,
+          `*Model: ${config.model || 'gpt-4o'}*`,
+        ].join('\n');
+
+        // Build public notes (shorter summary for speaker feedback)
+        const publicNotes = result.summary;
+
+        // Extract scores from criteriaScores if available
+        const criteriaScores = result.criteriaScores || {};
+        const contentScore = criteriaScores['Content Quality'] || criteriaScores['content'] || result.overallScore;
+        const presentationScore = criteriaScores['Presentation Clarity'] || criteriaScores['presentation'] || result.overallScore;
+        const relevanceScore = criteriaScores['Relevance'] || criteriaScores['relevance'] || result.overallScore;
+
+        const review = await ctx.reviews.create({
+          submissionId,
+          reviewerId: serviceAccountId,
+          overallScore: result.overallScore,
+          contentScore,
+          presentationScore,
+          relevanceScore,
+          privateNotes,
+          publicNotes,
+          recommendation: mappedRecommendation,
+        });
+
+        reviewId = review.id;
+        ctx.logger.info('Created review in core reviews table', {
+          reviewId: review.id,
+          submissionId,
+          overallScore: result.overallScore,
+        });
+      } else {
+        ctx.logger.warn('No service account ID found, skipping core review creation');
+      }
+    } catch (error) {
+      ctx.logger.error('Failed to create core review', {
+        submissionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     return {
       success: true,
       data: {
         submissionId,
+        reviewId,
         analysis: sanitizedAnalysis,
         analyzedAt: result.analyzedAt,
         provider: config.aiProvider || 'openai',

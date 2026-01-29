@@ -1,16 +1,18 @@
 # AI Paper Reviewer Plugin
 
-Automatically analyzes paper/talk submissions using AI to provide preliminary reviews with scoring, feedback, and recommendations.
+Automatically analyzes paper/talk submissions using AI to provide preliminary reviews with scoring, feedback, and recommendations. Reviews are stored in the core reviews table alongside human reviews.
 
 ## Features
 
 - **Multi-provider support** - OpenAI, Anthropic (Claude), and Google Gemini
+- **Core review integration** - AI reviews appear in the standard submissions list with scores
+- **Service account** - Plugin creates its own reviewer account (hidden from public by default)
 - **Event-aware criteria** - Uses the event's configured review criteria and weights
 - **Configurable strictness** - Lenient, Moderate, or Strict review standards
 - **Duplicate detection** - Identifies similar submissions within the same event
 - **Confidence thresholds** - Hide unreliable AI recommendations automatically
 - **JSON repair** - Robust response parsing with automatic retry
-- **Admin override** - Show hidden low-confidence results when needed
+- **Admin dashboard** - Review stats, job queue status, and bulk review actions
 
 ## Installation
 
@@ -44,31 +46,53 @@ Automatically analyzes paper/talk submissions using AI to provide preliminary re
 | **Confidence Threshold** | Hide recommendations below this confidence | `0.6` |
 | **Low Confidence Behavior** | Hide, Warn, or Require Override | `warn` |
 | **Auto-Review** | Automatically review new submissions | `true` |
+| **Re-review Cooldown** | Minimum wait between re-reviews (minutes) | `5` |
+| **Show on Team Page** | Display AI reviewer on public team page | `false` |
 
 ### Model Options by Provider
 
 | Provider | Models |
 |----------|--------|
-| **OpenAI** | gpt-4o, gpt-4o-mini, gpt-4-turbo |
-| **Anthropic** | claude-sonnet-4-20250514, claude-3-5-haiku-20241022, claude-3-opus-20240229 |
-| **Google** | gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash |
+| **OpenAI** | gpt-4o (recommended), gpt-4o-mini |
+| **Anthropic** | claude-sonnet-4-20250514 (recommended), claude-haiku-4-20250514 |
+| **Google** | gemini-2.0-flash (recommended), gemini-2.5-pro |
 
 ## How It Works
 
-1. A new submission is created (or updated with content changes)
-2. The plugin fetches event review criteria and checks for duplicate submissions
-3. A dynamic prompt is built using event context, criteria, strictness level, and any similar submissions found
-4. The AI provider analyzes the submission and returns structured JSON
-5. Results are parsed (with automatic repair if JSON is malformed)
-6. The AI Review panel displays scores, strengths, weaknesses, and recommendations
-7. Low-confidence results are handled according to the configured behavior
+1. When enabled, the plugin creates a service account (`ai-paper-reviewer@plugin.system`)
+2. A new submission is created (or updated with content changes)
+3. The plugin fetches event review criteria and checks for duplicate submissions
+4. A dynamic prompt is built using event context, criteria, strictness level, and any similar submissions found
+5. The AI provider analyzes the submission and returns structured JSON
+6. Results are parsed (with automatic repair if JSON is malformed)
+7. A review is created in the core reviews table using the service account
+8. The AI Review panel displays additional details (strengths, weaknesses, suggestions)
+9. Low-confidence results are handled according to the configured behavior
+
+## Service Account
+
+The plugin creates a non-privileged service account:
+- **Email**: `ai-paper-reviewer@plugin.system`
+- **Role**: REVIEWER (cannot access admin functions)
+- **Login**: Disabled (no password, unverified email)
+- **Public visibility**: Hidden from team page by default
+
+This allows AI reviews to appear alongside human reviews in the standard submissions list while maintaining security.
+
+## Admin Pages
+
+Access via **Admin > Plugins > AI Reviews**:
+
+- **Dashboard** - Review stats, job queue status, submission review queue, bulk actions
+- **History** - Complete history of AI reviews with scores and recommendations
+- **Personas** - Configure reviewer persona presets (Technical Expert, Business Analyst, etc.)
 
 ## Hooks
 
 | Hook | Trigger |
 |------|---------|
 | `submission.created` | Queues AI review for new submissions (if auto-review is enabled) |
-| `submission.updated` | Queues re-review when title, abstract, or outline changes |
+| `submission.updated` | Queues re-review when title, abstract, or outline changes (respects cooldown) |
 
 ## UI Components
 
@@ -77,8 +101,10 @@ Automatically analyzes paper/talk submissions using AI to provide preliminary re
 ## Permissions Required
 
 - `submissions:read` - Read submission content for analysis
-- `reviews:write` - Store AI review results
+- `reviews:write` - Create AI review records
+- `reviews:read` - Check for existing reviews
 - `events:read` - Fetch event criteria and context
+- `users:manage` - Create the service account
 
 ## File Structure
 
@@ -87,17 +113,43 @@ ai-paper-reviewer/
 ├── manifest.json              # Plugin metadata and config schema
 ├── index.ts                   # Plugin entry point, hooks, and job handler
 ├── components/
-│   └── ai-review-panel.tsx    # Review panel UI component
-└── lib/
-    ├── prompts.ts             # Dynamic prompt construction
-    ├── providers.ts           # OpenAI, Anthropic, Gemini API abstraction
-    ├── json-repair.ts         # JSON parse retry with AI-assisted repair
-    └── similarity.ts          # Jaccard similarity for duplicate detection
+│   ├── ai-review-panel.tsx    # Review panel UI component
+│   ├── admin-sidebar-item.tsx # Sidebar navigation component
+│   ├── admin-dashboard.tsx    # Admin dashboard page
+│   ├── admin-review-history.tsx # Review history page
+│   └── admin-personas.tsx     # Persona configuration page
+├── lib/
+│   ├── prompts.ts             # Dynamic prompt construction
+│   ├── providers.ts           # OpenAI, Anthropic, Gemini API abstraction
+│   ├── json-repair.ts         # JSON parse retry with AI-assisted repair
+│   └── similarity.ts          # Jaccard similarity for duplicate detection
+└── dist/                      # Pre-compiled admin bundles (generated)
+    ├── admin-pages.js
+    ├── admin-pages.js.map
+    └── admin-pages.manifest.json
 ```
 
 ## Version History
 
-### v1.1.0 (Current)
+### v1.6.0 (Current)
+- Service account integration - plugin creates its own reviewer account
+- Core review integration - AI reviews stored in main reviews table
+- Reviews appear in standard submissions list with scores
+- Added "Show on Team Page" visibility option
+- Requires cfp-directory-self-hosted v1.13.0+
+
+### v1.5.0
+- Admin dashboard with review stats and bulk actions
+- Review queue for unreviewed submissions
+- Improved tab styling and UI polish
+- Updated Anthropic models to Claude 4 series
+
+### v1.4.0
+- Admin pages for Review History and Reviewer Personas
+- Sidebar navigation for plugin admin pages
+- Persona presets (Technical Expert, Business Analyst, etc.)
+
+### v1.1.0
 - Event-aware review criteria with weighted scoring
 - Google Gemini provider support
 - Duplicate/similar submission detection
@@ -113,4 +165,4 @@ ai-paper-reviewer/
 
 ## License
 
-MIT
+Apache License 2.0

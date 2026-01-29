@@ -6,7 +6,8 @@ Official plugin repository for [CFP Directory](https://github.com/l33tdawg/cfp-d
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [AI Paper Reviewer](plugins/ai-paper-reviewer/) | 1.4.0 | Intelligent submission analysis with event-aware criteria, duplicate detection, confidence thresholds, admin review history, and persona configuration |
+| [AI Paper Reviewer](plugins/ai-paper-reviewer/) | 1.6.0 | Intelligent submission analysis with event-aware criteria, duplicate detection, confidence thresholds, core review integration, and service account support |
+| [Example: Webhook Notifications](plugins/example-webhook/) | 1.0.0 | A starter template for plugin developers demonstrating hooks, config schemas, HMAC signatures, and background job retries |
 
 ## How It Works
 
@@ -29,24 +30,28 @@ See the [CFP Directory Plugin SDK documentation](https://github.com/l33tdawg/cfp
 cfp-directory-official-plugins/
 ├── registry.json                    # Gallery fetches this
 ├── plugins/
-│   └── ai-paper-reviewer/          # Plugin source code
-│       ├── README.md
+│   ├── ai-paper-reviewer/          # AI-powered submission analysis
+│   │   ├── README.md
+│   │   ├── manifest.json
+│   │   ├── index.ts
+│   │   ├── components/
+│   │   │   ├── ai-review-panel.tsx
+│   │   │   ├── admin-sidebar-item.tsx
+│   │   │   ├── admin-dashboard.tsx
+│   │   │   ├── admin-review-history.tsx
+│   │   │   └── admin-personas.tsx
+│   │   ├── lib/
+│   │   │   ├── prompts.ts
+│   │   │   ├── providers.ts
+│   │   │   ├── json-repair.ts
+│   │   │   └── similarity.ts
+│   │   └── dist/                    # Pre-compiled admin bundles (generated)
+│   │       ├── admin-pages.js
+│   │       ├── admin-pages.js.map
+│   │       └── admin-pages.manifest.json
+│   └── example-webhook/             # Developer starter template
 │       ├── manifest.json
-│       ├── index.ts
-│       ├── components/
-│       │   ├── ai-review-panel.tsx
-│       │   ├── admin-sidebar-item.tsx
-│       │   ├── admin-review-history.tsx
-│       │   └── admin-personas.tsx
-│       ├── lib/
-│       │   ├── prompts.ts
-│       │   ├── providers.ts
-│       │   ├── json-repair.ts
-│       │   └── similarity.ts
-│       └── dist/                    # Pre-compiled admin bundles (generated)
-│           ├── admin-pages.js
-│           ├── admin-pages.js.map
-│           └── admin-pages.manifest.json
+│       └── index.ts
 ├── tests/
 │   └── ai-paper-reviewer/          # Plugin tests
 ├── docs/

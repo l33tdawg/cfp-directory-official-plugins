@@ -88,7 +88,7 @@
         "x-friendly-hint": "Models are fetched from your provider using your API key. If the list is empty or shows an error, check that your API key is valid.",
         "x-options-api": {
           "action": "list-models",
-          "params": { "provider": "${aiProvider}" },
+          "params": { "provider": "${aiProvider}", "apiKey": "${apiKey}" },
           "dependsOnFields": ["aiProvider", "apiKey"],
           "cacheSeconds": 300,
           "loadingText": "Loading models from provider...",

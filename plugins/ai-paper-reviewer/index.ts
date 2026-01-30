@@ -405,11 +405,12 @@ const plugin: Plugin = {
   actions: {
     'list-models': async (
       ctx: PluginContext,
-      params: { provider?: string }
+      params: { provider?: string; apiKey?: string }
     ): Promise<FetchModelsResult> => {
       const config = ctx.config as AiReviewerConfig;
       const provider = params.provider || config.aiProvider || 'openai';
-      const apiKey = config.apiKey;
+      // Prefer apiKey from params (form's current value) over saved config
+      const apiKey = params.apiKey || config.apiKey;
 
       if (!apiKey) {
         return {

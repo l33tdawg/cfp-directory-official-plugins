@@ -1,7 +1,7 @@
 {
   "name": "ai-paper-reviewer",
   "displayName": "AI Paper Reviewer",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "apiVersion": "1.0",
   "description": "Intelligent submission analysis with expandable review details, re-review capability, and criteria-based scoring",
   "author": "CFP Directory",
@@ -97,7 +97,7 @@
         "x-friendly-hint": "Available models load from your provider. Recommended models are marked.",
         "x-options-api": {
           "action": "list-models",
-          "params": { "provider": "${aiProvider}", "apiKey": "${apiKey}" },
+          "params": { "provider": "${aiProvider}" },
           "dependsOnFields": ["aiProvider", "apiKey"],
           "cacheSeconds": 300,
           "loadingText": "Loading models...",

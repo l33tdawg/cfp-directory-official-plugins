@@ -67,6 +67,16 @@ const AI_LIMITS = {
   MAX_MAX_INPUT_CHARS: 100000,
 } as const;
 
+/** Limits for background processing to prevent resource exhaustion */
+const PROCESSING_LIMITS = {
+  /** Maximum pending jobs to scan when cancelling superseded jobs */
+  MAX_PENDING_JOBS_TO_SCAN: 100,
+  /** Maximum submissions to consider for duplicate detection */
+  MAX_SUBMISSIONS_FOR_SIMILARITY: 500,
+  /** Maximum abstract length used for similarity tokenization */
+  MAX_ABSTRACT_LENGTH_FOR_SIMILARITY: 10000,
+} as const;
+
 // =============================================================================
 // ANALYSIS RESULT TYPE
 // =============================================================================
@@ -402,9 +412,11 @@ const plugin: Plugin = {
       }
 
       // Cancel any existing pending ai-review jobs for this submission
+      // SECURITY: Limit jobs scanned to prevent resource exhaustion on large queues
       try {
         const pendingJobs = await ctx.jobs!.getJobs('pending');
-        for (const job of pendingJobs) {
+        const jobsToScan = pendingJobs.slice(0, PROCESSING_LIMITS.MAX_PENDING_JOBS_TO_SCAN);
+        for (const job of jobsToScan) {
           if (
             job.type === 'ai-review' &&
             (job.payload as Record<string, unknown>)?.submissionId === submissionId
@@ -415,6 +427,12 @@ const plugin: Plugin = {
               submissionId,
             });
           }
+        }
+        if (pendingJobs.length > PROCESSING_LIMITS.MAX_PENDING_JOBS_TO_SCAN) {
+          ctx.logger.warn('Job queue exceeds scan limit, some jobs may not be cancelled', {
+            queueSize: pendingJobs.length,
+            scanned: PROCESSING_LIMITS.MAX_PENDING_JOBS_TO_SCAN,
+          });
         }
       } catch {
         ctx.logger.warn('Failed to cancel existing pending jobs for submission', { submissionId });
@@ -490,23 +508,20 @@ const plugin: Plugin = {
   actions: {
     'list-models': async (
       ctx: PluginContext,
-      params: { provider?: string; apiKey?: string }
+      params: { provider?: string }
     ): Promise<FetchModelsResult> => {
       const config = ctx.config as AiReviewerConfig;
       const provider = params.provider || config.aiProvider || 'openai';
-      // Prefer apiKey from params (form's current value) over saved config
-      // BUT ignore the placeholder value which indicates a masked password field
-      const PASSWORD_PLACEHOLDER = '********';
-      const apiKey = (params.apiKey && params.apiKey !== PASSWORD_PLACEHOLDER)
-        ? params.apiKey
-        : config.apiKey;
+      // SECURITY: Only use server-side config.apiKey - never accept API keys via params
+      // This prevents API keys from being logged in request bodies/action params
+      const apiKey = config.apiKey;
 
       if (!apiKey) {
         return {
           success: false,
           error: {
             code: 'NO_API_KEY',
-            message: 'Please enter your API key first',
+            message: 'Please save your API key in plugin settings first',
           },
         };
       }
@@ -728,15 +743,38 @@ export async function handleAiReviewJob(
     }
 
     // 2. Run duplicate detection if enabled
+    // SECURITY: Limit submissions considered to prevent O(n²) resource exhaustion
     let similarSubmissions: SimilarSubmission[] = [];
     if (eventId && config.enableDuplicateDetection !== false) {
       try {
         const allSubmissions = await ctx.submissions.list({ eventId });
-        const others = allSubmissions.filter((s) => s.id !== submissionId);
+        const others = allSubmissions
+          .filter((s) => s.id !== submissionId)
+          .slice(0, PROCESSING_LIMITS.MAX_SUBMISSIONS_FOR_SIMILARITY);
+
+        if (allSubmissions.length > PROCESSING_LIMITS.MAX_SUBMISSIONS_FOR_SIMILARITY + 1) {
+          ctx.logger.info('Large event - duplicate detection limited to recent submissions', {
+            totalSubmissions: allSubmissions.length,
+            considered: PROCESSING_LIMITS.MAX_SUBMISSIONS_FOR_SIMILARITY,
+          });
+        }
+
+        // Truncate abstracts to limit tokenization cost
+        const truncatedOthers = others.map((s) => ({
+          id: s.id,
+          title: s.title,
+          abstract: s.abstract?.slice(0, PROCESSING_LIMITS.MAX_ABSTRACT_LENGTH_FOR_SIMILARITY) || null,
+        }));
+
+        const truncatedAbstract = submissionData.abstract?.slice(
+          0,
+          PROCESSING_LIMITS.MAX_ABSTRACT_LENGTH_FOR_SIMILARITY
+        ) || null;
+
         similarSubmissions = findSimilarSubmissions(
           submissionData.title,
-          submissionData.abstract,
-          others.map((s) => ({ id: s.id, title: s.title, abstract: s.abstract })),
+          truncatedAbstract,
+          truncatedOthers,
           config.duplicateThreshold ?? 0.7
         );
       } catch {
@@ -888,10 +926,9 @@ export async function handleAiReviewJob(
             if (createError instanceof Error && createError.message.includes('Unique constraint')) {
               ctx.logger.info('Review already exists, finding and updating...', { submissionId });
               const allReviews = await ctx.reviews.getBySubmission(submissionId);
-              const aiReview = allReviews.find(r =>
-                r.reviewerId === serviceAccountId ||
-                r.privateNotes?.startsWith('## AI Analysis Summary')
-              );
+              // SECURITY: Only identify AI reviews by reviewerId - never by content pattern
+              // Content-based detection (e.g., privateNotes prefix) can be spoofed by other reviewers
+              const aiReview = allReviews.find(r => r.reviewerId === serviceAccountId);
               if (aiReview) {
                 review = await ctx.reviews.update(aiReview.id, reviewData);
                 ctx.logger.info('Updated review after unique constraint error', {
@@ -900,7 +937,14 @@ export async function handleAiReviewJob(
                   overallScore: result.overallScore,
                 });
               } else {
-                throw createError; // Re-throw if we can't find the review
+                // No AI review found - this might be a constraint on something other than reviewerId
+                // Log and re-throw to avoid corrupting other users' reviews
+                ctx.logger.error('Unique constraint but no AI review found for this submission', {
+                  submissionId,
+                  serviceAccountId,
+                  totalReviews: allReviews.length,
+                });
+                throw createError;
               }
             } else {
               throw createError;

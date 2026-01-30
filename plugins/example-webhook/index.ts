@@ -78,7 +78,36 @@ function isPrivateIP(ip: string): boolean {
 }
 
 /**
+ * Resolve hostname to IP addresses with timeout protection
+ * Returns null if DNS resolution is not available (browser/edge runtime)
+ */
+async function resolveHostname(hostname: string, timeoutMs: number = 3000): Promise<string[] | null> {
+  // Check if we're in Node.js environment with dns module available
+  try {
+    // Dynamic import to avoid bundler issues in browser environments
+    const dns = await import('dns').catch(() => null);
+    if (!dns?.promises?.lookup) {
+      return null; // DNS resolution not available
+    }
+
+    // Use Promise.race for timeout protection
+    const resolvePromise = dns.promises.lookup(hostname, { all: true })
+      .then((results: Array<{ address: string }>) => results.map(r => r.address));
+
+    const timeoutPromise = new Promise<string[]>((_, reject) => {
+      setTimeout(() => reject(new Error('DNS resolution timeout')), timeoutMs);
+    });
+
+    return await Promise.race([resolvePromise, timeoutPromise]);
+  } catch {
+    // DNS module not available or resolution failed
+    return null;
+  }
+}
+
+/**
  * Check if hostname resolves to a private IP (SSRF protection)
+ * Now performs actual DNS resolution when available to prevent DNS rebinding attacks
  */
 async function isHostnamePrivate(hostname: string): Promise<boolean> {
   // Check common localhost aliases
@@ -93,8 +122,7 @@ async function isHostnamePrivate(hostname: string): Promise<boolean> {
     return isPrivateIP(ipLiteralMatch[1]);
   }
 
-  // For actual hostnames, we can't do DNS resolution in browser/edge runtime
-  // So we check for suspicious patterns that might indicate internal services
+  // Check for suspicious domain patterns first (quick check before DNS)
   const suspiciousPatterns = [
     /\.local$/i,
     /\.internal$/i,
@@ -109,6 +137,18 @@ async function isHostnamePrivate(hostname: string): Promise<boolean> {
 
   for (const pattern of suspiciousPatterns) {
     if (pattern.test(hostname)) return true;
+  }
+
+  // SECURITY: Perform actual DNS resolution to catch DNS rebinding attacks
+  // An attacker could set up a hostname that initially resolves to a public IP
+  // but later rebinds to a private IP like 169.254.169.254 (cloud metadata)
+  const resolvedIPs = await resolveHostname(hostname);
+  if (resolvedIPs) {
+    for (const ip of resolvedIPs) {
+      if (isPrivateIP(ip)) {
+        return true; // Hostname resolves to a private IP
+      }
+    }
   }
 
   return false;

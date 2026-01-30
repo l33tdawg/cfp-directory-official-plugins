@@ -136,11 +136,13 @@ function LowConfidenceCard({
   threshold,
   behavior,
   onOverride,
+  isAdmin,
 }: {
   confidence: number;
   threshold: number;
   behavior: string;
   onOverride: () => void;
+  isAdmin: boolean;
 }) {
   return (
     <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-md" data-testid="ai-low-confidence">
@@ -152,13 +154,16 @@ function LowConfidenceCard({
           <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
             AI recommendation hidden due to low confidence. This prevents potentially unreliable assessments from influencing decisions.
           </p>
-          <button
-            onClick={onOverride}
-            className="mt-2 text-xs px-2 py-1 bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 rounded hover:bg-amber-300 dark:hover:bg-amber-700"
-            data-testid="ai-override-button"
-          >
-            Admin: Show Anyway
-          </button>
+          {/* SECURITY: Only admins can override low-confidence hiding */}
+          {isAdmin && (
+            <button
+              onClick={onOverride}
+              className="mt-2 text-xs px-2 py-1 bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 rounded hover:bg-amber-300 dark:hover:bg-amber-700"
+              data-testid="ai-override-button"
+            >
+              Admin: Show Anyway
+            </button>
+          )}
         </>
       ) : (
         <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
@@ -357,6 +362,7 @@ export function AiReviewPanel({ context, data }: PluginComponentProps) {
           threshold={confidenceThreshold}
           behavior={lowConfidenceBehavior}
           onOverride={() => setShowOverridden(true)}
+          isAdmin={context.isAdmin === true}
         />
       )}
 

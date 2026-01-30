@@ -252,11 +252,11 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [clearingReviews, setClearingReviews] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // Password fields are redacted on client, so check via plugin data
-  // Fall back to checking config.apiKey in case it's not redacted
+  // SECURITY: Never access context.config.apiKey on client - it should be redacted by host
+  // Only rely on server-derived boolean from plugin data API
   // Allow actions when status is unknown (null) - server will validate
-  const hasApiKey = apiKeyConfigured === true || Boolean(context.config.apiKey);
-  const apiKeyStatusKnown = apiKeyConfigured !== null || Boolean(context.config.apiKey);
+  const hasApiKey = apiKeyConfigured === true;
+  const apiKeyStatusKnown = apiKeyConfigured !== null;
   const provider = (context.config.aiProvider as string) || 'openai';
   const model = (context.config.model as string) || 'gpt-4o';
 

@@ -589,13 +589,17 @@ export async function handleAiReviewJob(
     // Strip rawResponse before persisting to job results
     const { rawResponse: _raw, ...sanitizedAnalysis } = result;
 
-    // 7. Create a review in the core reviews table
+    // 7. Create or update a review in the core reviews table
     let reviewId: string | undefined;
     try {
       // Get the service account ID
       const serviceAccountId = await ctx.data.get<string>('config', 'service-account-id');
 
       if (serviceAccountId) {
+        // Check if there's an existing review from this service account for this submission
+        const existingReviews = await ctx.reviews.list({ submissionId, reviewerId: serviceAccountId });
+        const existingReview = existingReviews.length > 0 ? existingReviews[0] : null;
+
         // Map AI recommendation to ReviewRecommendation enum
         const recommendationMap: Record<string, 'STRONG_ACCEPT' | 'ACCEPT' | 'NEUTRAL' | 'REJECT' | 'STRONG_REJECT'> = {
           'STRONG_ACCEPT': 'STRONG_ACCEPT',
@@ -633,9 +637,8 @@ export async function handleAiReviewJob(
 
         const privateNotes = privateNoteParts.join('\n');
 
-        // Public notes should NOT contain AI analysis - leave empty for speakers
-        // Admin can choose to share specific feedback manually if desired
-        const publicNotes = undefined;
+        // Public notes - provide constructive summary for speakers (only shown if rejected)
+        const publicNotes = result.summary || 'Thank you for your submission.';
 
         // Extract scores from criteriaScores if available
         const criteriaScores = result.criteriaScores || {};
@@ -643,9 +646,7 @@ export async function handleAiReviewJob(
         const presentationScore = criteriaScores['Presentation Clarity'] || criteriaScores['presentation'] || result.overallScore;
         const relevanceScore = criteriaScores['Relevance'] || criteriaScores['relevance'] || result.overallScore;
 
-        const review = await ctx.reviews.create({
-          submissionId,
-          reviewerId: serviceAccountId,
+        const reviewData = {
           overallScore: result.overallScore,
           contentScore,
           presentationScore,
@@ -653,19 +654,37 @@ export async function handleAiReviewJob(
           privateNotes,
           publicNotes,
           recommendation: mappedRecommendation,
-        });
+        };
+
+        let review;
+        if (existingReview) {
+          // Update existing review (for re-reviews)
+          review = await ctx.reviews.update(existingReview.id, reviewData);
+          ctx.logger.info('Updated existing review in core reviews table', {
+            reviewId: review.id,
+            submissionId,
+            overallScore: result.overallScore,
+          });
+        } else {
+          // Create new review
+          review = await ctx.reviews.create({
+            submissionId,
+            reviewerId: serviceAccountId,
+            ...reviewData,
+          });
+          ctx.logger.info('Created review in core reviews table', {
+            reviewId: review.id,
+            submissionId,
+            overallScore: result.overallScore,
+          });
+        }
 
         reviewId = review.id;
-        ctx.logger.info('Created review in core reviews table', {
-          reviewId: review.id,
-          submissionId,
-          overallScore: result.overallScore,
-        });
       } else {
         ctx.logger.warn('No service account ID found, skipping core review creation');
       }
     } catch (error) {
-      ctx.logger.error('Failed to create core review', {
+      ctx.logger.error('Failed to create/update core review', {
         submissionId,
         error: error instanceof Error ? error.message : String(error),
       });

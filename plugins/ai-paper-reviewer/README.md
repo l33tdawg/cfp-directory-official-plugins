@@ -131,13 +131,19 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.6.0 (Current)
+### v1.7.0 (Current)
+- Dynamic model fetching - validates API keys and shows real model list from provider
+- API key validation at configuration time
+- Dashboard shows proper API key configuration status
+- Unit tests for dashboard and model fetcher
+- Requires cfp-directory-self-hosted v1.13.0+
+
+### v1.6.0
 - Service account integration - plugin creates its own reviewer account
 - Core review integration - AI reviews stored in main reviews table
 - Reviews appear in standard submissions list with scores
 - Added "Show on Team Page" visibility option
-- Dynamic model fetching - validates API keys and shows real model list from provider
-- Requires cfp-directory-self-hosted v1.13.0+
+- Requires cfp-directory-self-hosted v1.12.0+
 
 ### v1.5.0
 - Admin dashboard with review stats and bulk actions

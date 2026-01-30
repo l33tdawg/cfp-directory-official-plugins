@@ -478,30 +478,37 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         averageScore,
       });
 
-      // Get recent reviews (last 5 completed) with proper result parsing
-      const recent = completedJobs
-        .slice(0, 10) // Show more reviews
-        .map((job: {
-          id: string;
-          payload: { title?: string; submissionId?: string; eventId?: string; eventSlug?: string };
-          status: string;
-          completedAt: string | null;
-          result?: JobResultData;
-        }) => {
-          const parsed = getAnalysisFromJobResult(job.result || null);
-          return {
-            id: job.id,
-            title: job.payload.title || 'Untitled',
-            submissionId: parsed.submissionId || job.payload.submissionId || null,
-            eventId: job.payload.eventId || null,
-            eventSlug: parsed.eventSlug || job.payload.eventSlug || null,
-            score: parsed.score,
-            recommendation: parsed.recommendation,
-            status: job.status,
-            completedAt: job.completedAt,
-            analysis: parsed.analysis,
-          };
-        });
+      // Get recent reviews with proper result parsing, deduplicated by submissionId
+      const allReviews = completedJobs.map((job: {
+        id: string;
+        payload: { title?: string; submissionId?: string; eventId?: string; eventSlug?: string };
+        status: string;
+        completedAt: string | null;
+        result?: JobResultData;
+      }) => {
+        const parsed = getAnalysisFromJobResult(job.result || null);
+        return {
+          id: job.id,
+          title: job.payload.title || 'Untitled',
+          submissionId: parsed.submissionId || job.payload.submissionId || null,
+          eventId: job.payload.eventId || null,
+          eventSlug: parsed.eventSlug || job.payload.eventSlug || null,
+          score: parsed.score,
+          recommendation: parsed.recommendation,
+          status: job.status,
+          completedAt: job.completedAt,
+          analysis: parsed.analysis,
+        };
+      });
+
+      // Deduplicate by submissionId, keeping only the most recent review for each
+      const seenSubmissions = new Set<string>();
+      const recent = allReviews.filter((review) => {
+        if (!review.submissionId) return true; // Keep reviews without submissionId
+        if (seenSubmissions.has(review.submissionId)) return false;
+        seenSubmissions.add(review.submissionId);
+        return true;
+      }).slice(0, 10);
 
       setRecentReviews(recent);
 

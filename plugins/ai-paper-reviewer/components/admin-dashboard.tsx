@@ -26,8 +26,8 @@ import {
   PlayCircle,
   FileText,
   RotateCcw,
-  CheckSquare,
-  Square,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import type { PluginComponentProps } from '@/lib/plugins';
 
@@ -44,15 +44,28 @@ interface ReviewStats {
   averageScore: number;
 }
 
+interface AnalysisDetails {
+  overallScore?: number;
+  recommendation?: string;
+  confidence?: number;
+  summary?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+  suggestions?: string[];
+  criteriaScores?: Record<string, number>;
+}
+
 interface RecentReview {
   id: string;
   title: string;
   submissionId: string | null;
+  eventId: string | null;
   eventSlug: string | null;
   score: number | null;
   recommendation: string | null;
   status: string;
   completedAt: string | null;
+  analysis: AnalysisDetails | null;
 }
 
 interface JobResultData {
@@ -60,41 +73,45 @@ interface JobResultData {
   data?: {
     submissionId?: string;
     eventSlug?: string;
-    analysis?: {
-      overallScore?: number;
-      recommendation?: string;
-    };
+    analysis?: AnalysisDetails;
     // Direct fields in data (some formats)
     overallScore?: number;
     recommendation?: string;
+    confidence?: number;
+    summary?: string;
+    strengths?: string[];
+    weaknesses?: string[];
+    suggestions?: string[];
+    criteriaScores?: Record<string, number>;
   };
   // Old format fields (direct on result)
   submissionId?: string;
   eventSlug?: string;
-  analysis?: {
-    overallScore?: number;
-    recommendation?: string;
-  };
+  analysis?: AnalysisDetails;
   // Very old format - direct on result
   overallScore?: number;
   recommendation?: string;
+  confidence?: number;
+  summary?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+  suggestions?: string[];
+  criteriaScores?: Record<string, number>;
 }
 
 /**
  * Helper to extract analysis from job result (handles multiple formats)
- * Supports:
- * - New format: { success, data: { analysis: { overallScore } } }
- * - Data direct: { success, data: { overallScore } }
- * - Old format: { analysis: { overallScore } }
- * - Direct: { overallScore }
+ * Returns full analysis details for expandable view
  */
 function getAnalysisFromJobResult(result: JobResultData | null): {
   score: number | null;
   recommendation: string | null;
   submissionId: string | null;
   eventSlug: string | null;
+  analysis: AnalysisDetails | null;
 } {
-  if (!result) return { score: null, recommendation: null, submissionId: null, eventSlug: null };
+  const empty = { score: null, recommendation: null, submissionId: null, eventSlug: null, analysis: null };
+  if (!result) return empty;
 
   // New format: result.data.analysis
   if (result.data?.analysis?.overallScore !== undefined) {
@@ -103,16 +120,28 @@ function getAnalysisFromJobResult(result: JobResultData | null): {
       recommendation: result.data.analysis.recommendation ?? null,
       submissionId: result.data.submissionId ?? null,
       eventSlug: result.data.eventSlug ?? null,
+      analysis: result.data.analysis,
     };
   }
 
   // Data direct format: result.data.overallScore
   if (result.data?.overallScore !== undefined) {
+    const analysis: AnalysisDetails = {
+      overallScore: result.data.overallScore,
+      recommendation: result.data.recommendation,
+      confidence: result.data.confidence,
+      summary: result.data.summary,
+      strengths: result.data.strengths,
+      weaknesses: result.data.weaknesses,
+      suggestions: result.data.suggestions,
+      criteriaScores: result.data.criteriaScores,
+    };
     return {
       score: result.data.overallScore,
       recommendation: result.data.recommendation ?? null,
       submissionId: result.data.submissionId ?? null,
       eventSlug: result.data.eventSlug ?? null,
+      analysis,
     };
   }
 
@@ -123,20 +152,32 @@ function getAnalysisFromJobResult(result: JobResultData | null): {
       recommendation: result.analysis.recommendation ?? null,
       submissionId: result.submissionId ?? null,
       eventSlug: result.eventSlug ?? null,
+      analysis: result.analysis,
     };
   }
 
   // Very old format: direct on result
   if (result.overallScore !== undefined) {
+    const analysis: AnalysisDetails = {
+      overallScore: result.overallScore,
+      recommendation: result.recommendation,
+      confidence: result.confidence,
+      summary: result.summary,
+      strengths: result.strengths,
+      weaknesses: result.weaknesses,
+      suggestions: result.suggestions,
+      criteriaScores: result.criteriaScores,
+    };
     return {
       score: result.overallScore,
       recommendation: result.recommendation ?? null,
       submissionId: result.submissionId ?? null,
       eventSlug: result.eventSlug ?? null,
+      analysis,
     };
   }
 
-  return { score: null, recommendation: null, submissionId: null, eventSlug: null };
+  return empty;
 }
 
 interface SubmissionWithReview {
@@ -204,10 +245,9 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [queueingIds, setQueueingIds] = useState<Set<string>>(new Set());
   const [apiKeyConfigured, setApiKeyConfigured] = useState<boolean | null>(null);
   const [activeJobs, setActiveJobs] = useState<ActiveJob[]>([]);
-  const [reviewedSubmissions, setReviewedSubmissions] = useState<SubmissionWithReview[]>([]);
-  const [selectedForReReview, setSelectedForReReview] = useState<Set<string>>(new Set());
+  const [expandedReviews, setExpandedReviews] = useState<Set<string>>(new Set());
+  const [reReviewingIds, setReReviewingIds] = useState<Set<string>>(new Set());
   const [reReviewingAll, setReReviewingAll] = useState(false);
-  const [showReviewedSection, setShowReviewedSection] = useState(false);
 
   // Password fields are redacted on client, so check via plugin data
   // Fall back to checking config.apiKey in case it's not redacted
@@ -318,11 +358,6 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         setUnreviewedSubmissions(unreviewed.slice(0, 10));
 
         // Get reviewed submissions for re-review capability
-        const reviewed = submissionsData.submissions.filter(
-          (s: SubmissionWithReview) => s.aiReview.status === 'reviewed'
-        );
-        setReviewedSubmissions(reviewed.slice(0, 20)); // Show first 20
-
         setSubmissionStats(submissionsData.stats);
       }
 
@@ -445,24 +480,26 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
 
       // Get recent reviews (last 5 completed) with proper result parsing
       const recent = completedJobs
-        .slice(0, 5)
+        .slice(0, 10) // Show more reviews
         .map((job: {
           id: string;
-          payload: { title?: string; submissionId?: string; eventSlug?: string };
+          payload: { title?: string; submissionId?: string; eventId?: string; eventSlug?: string };
           status: string;
           completedAt: string | null;
           result?: JobResultData;
         }) => {
-          const analysis = getAnalysisFromJobResult(job.result || null);
+          const parsed = getAnalysisFromJobResult(job.result || null);
           return {
             id: job.id,
             title: job.payload.title || 'Untitled',
-            submissionId: analysis.submissionId || job.payload.submissionId || null,
-            eventSlug: analysis.eventSlug || job.payload.eventSlug || null,
-            score: analysis.score,
-            recommendation: analysis.recommendation,
+            submissionId: parsed.submissionId || job.payload.submissionId || null,
+            eventId: job.payload.eventId || null,
+            eventSlug: parsed.eventSlug || job.payload.eventSlug || null,
+            score: parsed.score,
+            recommendation: parsed.recommendation,
             status: job.status,
             completedAt: job.completedAt,
+            analysis: parsed.analysis,
           };
         });
 
@@ -476,11 +513,6 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         setUnreviewedSubmissions(unreviewed.slice(0, 10)); // Show first 10
 
         // Get reviewed submissions for re-review capability
-        const reviewed = submissionsData.submissions.filter(
-          (s: SubmissionWithReview) => s.aiReview.status === 'reviewed'
-        );
-        setReviewedSubmissions(reviewed.slice(0, 20)); // Show first 20
-
         setSubmissionStats(submissionsData.stats);
       }
     } catch (err) {
@@ -576,9 +608,11 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     }
   };
 
-  // Re-review a single submission (even if already reviewed)
-  const queueReReview = async (submission: SubmissionWithReview) => {
-    setQueueingIds((prev) => new Set(prev).add(submission.id));
+  // Re-review a single submission from Recent Reviews
+  const queueReReview = async (review: RecentReview) => {
+    if (!review.submissionId) return;
+
+    setReReviewingIds((prev) => new Set(prev).add(review.id));
 
     try {
       const response = await fetch(`/api/plugins/${context.pluginId}/jobs`, {
@@ -587,11 +621,11 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         body: JSON.stringify({
           type: 'ai-review',
           payload: {
-            submissionId: submission.id,
-            eventId: submission.eventId,
-            title: submission.title,
-            abstract: submission.abstract,
-            isReReview: true, // Flag to indicate this is a re-review
+            submissionId: review.submissionId,
+            eventId: review.eventId,
+            eventSlug: review.eventSlug,
+            title: review.title,
+            isReReview: true,
           },
         }),
       });
@@ -601,101 +635,63 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         throw new Error(data.error || 'Failed to queue re-review');
       }
 
-      // Remove from selection if it was selected
-      setSelectedForReReview((prev) => {
-        const next = new Set(prev);
-        next.delete(submission.id);
-        return next;
-      });
-
       // Refresh data silently
       await refreshDataSilent();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to queue re-review');
     } finally {
-      setQueueingIds((prev) => {
+      setReReviewingIds((prev) => {
         const next = new Set(prev);
-        next.delete(submission.id);
+        next.delete(review.id);
         return next;
       });
     }
   };
 
-  // Re-review selected submissions
-  const queueSelectedReReviews = async () => {
-    if (selectedForReReview.size === 0) return;
-    if (apiKeyStatusKnown && !hasApiKey) {
-      setError('Please configure your API key before queuing reviews');
-      return;
-    }
-
-    setReReviewingAll(true);
-    setError(null);
-
-    try {
-      const selectedSubmissions = reviewedSubmissions.filter((s) =>
-        selectedForReReview.has(s.id)
-      );
-
-      for (const submission of selectedSubmissions) {
-        await fetch(`/api/plugins/${context.pluginId}/jobs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'ai-review',
-            payload: {
-              submissionId: submission.id,
-              eventId: submission.eventId,
-              title: submission.title,
-              abstract: submission.abstract,
-              isReReview: true,
-            },
-          }),
-        });
+  // Toggle expanded state for a review
+  const toggleReviewExpanded = (reviewId: string) => {
+    setExpandedReviews((prev) => {
+      const next = new Set(prev);
+      if (next.has(reviewId)) {
+        next.delete(reviewId);
+      } else {
+        next.add(reviewId);
       }
-
-      // Clear selection after queueing
-      setSelectedForReReview(new Set());
-
-      // Refresh data silently
-      await refreshDataSilent();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to queue re-reviews');
-    } finally {
-      setReReviewingAll(false);
-    }
+      return next;
+    });
   };
 
-  // Re-review ALL reviewed submissions
+  // Re-review all recent reviews
   const queueAllReReviews = async () => {
     if (apiKeyStatusKnown && !hasApiKey) {
       setError('Please configure your API key before queuing reviews');
       return;
     }
 
+    // Only re-review items that have a submissionId
+    const reviewsWithSubmissions = recentReviews.filter(r => r.submissionId);
+    if (reviewsWithSubmissions.length === 0) return;
+
     setReReviewingAll(true);
     setError(null);
 
     try {
-      for (const submission of reviewedSubmissions) {
+      for (const review of reviewsWithSubmissions) {
         await fetch(`/api/plugins/${context.pluginId}/jobs`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'ai-review',
             payload: {
-              submissionId: submission.id,
-              eventId: submission.eventId,
-              title: submission.title,
-              abstract: submission.abstract,
+              submissionId: review.submissionId,
+              eventId: review.eventId,
+              eventSlug: review.eventSlug,
+              title: review.title,
               isReReview: true,
             },
           }),
         });
       }
-
-      // Clear selection
-      setSelectedForReReview(new Set());
 
       // Refresh data silently
       await refreshDataSilent();
@@ -703,30 +699,6 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       setError(err instanceof Error ? err.message : 'Failed to queue re-reviews');
     } finally {
       setReReviewingAll(false);
-    }
-  };
-
-  // Toggle selection for re-review
-  const toggleSelectForReReview = (id: string) => {
-    setSelectedForReReview((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  // Select all reviewed submissions
-  const selectAllReviewed = () => {
-    if (selectedForReReview.size === reviewedSubmissions.length) {
-      // If all selected, deselect all
-      setSelectedForReReview(new Set());
-    } else {
-      // Select all
-      setSelectedForReReview(new Set(reviewedSubmissions.map((s) => s.id)));
     }
   };
 
@@ -1095,143 +1067,30 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
             </div>
           )}
 
-          {/* Reviewed Submissions - Re-review Section */}
-          {reviewedSubmissions.length > 0 && (
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="re-review-section">
-              <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                <div className="flex items-center justify-between">
-                  <button
-                    onClick={() => setShowReviewedSection(!showReviewedSection)}
-                    className="flex items-center gap-2 text-left"
-                  >
-                    <RotateCcw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      Re-review Submissions ({submissionStats.reviewed} reviewed)
-                    </h3>
-                    <span className="text-xs text-slate-400">
-                      {showReviewedSection ? '▲' : '▼'}
-                    </span>
-                  </button>
-                  {showReviewedSection && (hasApiKey || !apiKeyStatusKnown) && (
-                    <div className="flex items-center gap-2">
-                      {selectedForReReview.size > 0 && (
-                        <button
-                          onClick={queueSelectedReReviews}
-                          disabled={reReviewingAll}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 transition-colors"
-                        >
-                          {reReviewingAll ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <RotateCcw className="h-4 w-4" />
-                          )}
-                          Re-review Selected ({selectedForReReview.size})
-                        </button>
-                      )}
-                      <button
-                        onClick={queueAllReReviews}
-                        disabled={reReviewingAll}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 disabled:opacity-50 transition-colors"
-                      >
-                        {reReviewingAll ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <RotateCcw className="h-4 w-4" />
-                        )}
-                        Re-review All
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {showReviewedSection && (
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Select submissions to re-run AI analysis with updated criteria or personas.
-                  </p>
-                )}
-              </div>
-              {showReviewedSection && (
-                <>
-                  <div className="p-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                    <button
-                      onClick={selectAllReviewed}
-                      className="flex items-center gap-2 px-2 py-1 text-xs text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                    >
-                      {selectedForReReview.size === reviewedSubmissions.length ? (
-                        <CheckSquare className="h-4 w-4 text-blue-600" />
-                      ) : (
-                        <Square className="h-4 w-4" />
-                      )}
-                      {selectedForReReview.size === reviewedSubmissions.length ? 'Deselect All' : 'Select All'}
-                    </button>
-                  </div>
-                  <div className="divide-y divide-slate-200 dark:divide-slate-700 max-h-96 overflow-y-auto">
-                    {reviewedSubmissions.map((submission) => (
-                      <div
-                        key={submission.id}
-                        className={`p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 ${
-                          selectedForReReview.has(submission.id) ? 'bg-blue-50 dark:bg-blue-950/20' : ''
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <button
-                            onClick={() => toggleSelectForReReview(submission.id)}
-                            className="flex-shrink-0"
-                          >
-                            {selectedForReReview.has(submission.id) ? (
-                              <CheckSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                            ) : (
-                              <Square className="h-5 w-5 text-slate-400 dark:text-slate-500" />
-                            )}
-                          </button>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                              {submission.title}
-                            </p>
-                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                              <span>{submission.event.name}</span>
-                              <span>•</span>
-                              <span
-                                className={`font-medium ${getRecommendationColor(submission.aiReview.recommendation || null)}`}
-                              >
-                                {submission.aiReview.score !== null ? `${submission.aiReview.score}/5` : '-'}
-                                {submission.aiReview.recommendation && ` - ${submission.aiReview.recommendation.replace(/_/g, ' ')}`}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => queueReReview(submission)}
-                          disabled={(apiKeyStatusKnown && !hasApiKey) || queueingIds.has(submission.id)}
-                          className="ml-4 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 disabled:opacity-50 transition-colors"
-                        >
-                          {queueingIds.has(submission.id) ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <RotateCcw className="h-4 w-4" />
-                          )}
-                          Re-review
-                        </button>
-                      </div>
-                    ))}
-                    {submissionStats.reviewed > 20 && (
-                      <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                        Showing first 20 of {submissionStats.reviewed} reviewed submissions
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Recent Activity */}
+          {/* Recent Reviews - Expandable with Re-review */}
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="recent-activity">
             <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-              <div className="flex items-center gap-2">
-                <History className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  Recent Reviews
-                </h3>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Recent Reviews ({recentReviews.length})
+                  </h3>
+                </div>
+                {recentReviews.length > 0 && (hasApiKey || !apiKeyStatusKnown) && (
+                  <button
+                    onClick={queueAllReReviews}
+                    disabled={reReviewingAll || recentReviews.filter(r => r.submissionId).length === 0}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 disabled:opacity-50 transition-colors"
+                  >
+                    {reReviewingAll ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4" />
+                    )}
+                    Re-review All
+                  </button>
+                )}
               </div>
             </div>
             {recentReviews.length === 0 ? (
@@ -1240,52 +1099,188 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
               </div>
             ) : (
               <div className="divide-y divide-slate-200 dark:divide-slate-700">
-                {recentReviews.map((review) => (
-                  <div
-                    key={review.id}
-                    className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                        {review.title}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {review.completedAt
-                          ? new Date(review.completedAt).toLocaleString()
-                          : 'Pending'}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3 ml-4">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm font-semibold ${
-                          review.score !== null && review.score >= 4 ? 'text-green-600 dark:text-green-400' :
-                          review.score !== null && review.score >= 3 ? 'text-amber-600 dark:text-amber-400' :
-                          review.score !== null ? 'text-red-600 dark:text-red-400' : 'text-slate-400'
-                        }`}>
-                          {review.score !== null ? `${review.score}/5` : '-'}
-                        </span>
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            review.recommendation?.includes('ACCEPT') ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-                            review.recommendation?.includes('REJECT') ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                            'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-                          }`}
-                        >
-                          {review.recommendation?.replace(/_/g, ' ') || '-'}
-                        </span>
+                {recentReviews.map((review) => {
+                  const isExpanded = expandedReviews.has(review.id);
+                  const isReReviewing = reReviewingIds.has(review.id);
+                  const analysis = review.analysis;
+
+                  return (
+                    <div key={review.id}>
+                      {/* Main Row - Clickable to expand */}
+                      <div
+                        className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer"
+                        onClick={() => toggleReviewExpanded(review.id)}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {/* Expand/Collapse Icon */}
+                          <button className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                            {isExpanded ? (
+                              <ChevronUp className="h-5 w-5" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5" />
+                            )}
+                          </button>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                              {review.title}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {review.completedAt
+                                ? new Date(review.completedAt).toLocaleString()
+                                : 'Pending'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 ml-4" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-semibold ${
+                              review.score !== null && review.score >= 4 ? 'text-green-600 dark:text-green-400' :
+                              review.score !== null && review.score >= 3 ? 'text-amber-600 dark:text-amber-400' :
+                              review.score !== null ? 'text-red-600 dark:text-red-400' : 'text-slate-400'
+                            }`}>
+                              {review.score !== null ? `${review.score}/5` : '-'}
+                            </span>
+                            <span
+                              className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                review.recommendation?.includes('ACCEPT') ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                                review.recommendation?.includes('REJECT') ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                                'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                              }`}
+                            >
+                              {review.recommendation?.replace(/_/g, ' ') || '-'}
+                            </span>
+                          </div>
+                          {/* Re-review Button */}
+                          {review.submissionId && (
+                            <button
+                              onClick={() => queueReReview(review)}
+                              disabled={(apiKeyStatusKnown && !hasApiKey) || isReReviewing}
+                              className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-700 rounded hover:bg-blue-50 dark:hover:bg-blue-950/50 disabled:opacity-50 transition-colors"
+                            >
+                              {isReReviewing ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-3 w-3" />
+                              )}
+                              Re-review
+                            </button>
+                          )}
+                          {/* View Submission Link */}
+                          {review.submissionId && review.eventSlug && (
+                            <a
+                              href={`/admin/events/${review.eventSlug}/submissions/${review.submissionId}`}
+                              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-200 dark:border-purple-700 rounded hover:bg-purple-50 dark:hover:bg-purple-950/50 transition-colors"
+                            >
+                              <FileText className="h-3 w-3" />
+                              View
+                            </a>
+                          )}
+                        </div>
                       </div>
-                      {review.submissionId && review.eventSlug && (
-                        <a
-                          href={`/admin/events/${review.eventSlug}/submissions/${review.submissionId}`}
-                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-200 dark:border-purple-700 rounded hover:bg-purple-50 dark:hover:bg-purple-950/50 transition-colors"
-                        >
-                          <FileText className="h-3 w-3" />
-                          View
-                        </a>
+
+                      {/* Expanded Details - Same style as Review History */}
+                      {isExpanded && analysis && (
+                        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700">
+                          <div className="space-y-4 text-sm">
+                            {/* Summary */}
+                            {analysis.summary && (
+                              <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                                <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Summary</span>
+                                <span className="text-slate-600 dark:text-slate-400">{analysis.summary}</span>
+                              </div>
+                            )}
+
+                            {/* Strengths & Weaknesses Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {/* Strengths - Green */}
+                              {analysis.strengths && analysis.strengths.length > 0 && (
+                                <div className="bg-green-50 dark:bg-green-950/30 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                                  <span className="font-semibold text-green-700 dark:text-green-300 block mb-2">Strengths</span>
+                                  <ul className="list-disc list-inside space-y-1">
+                                    {analysis.strengths.map((s, i) => (
+                                      <li key={i} className="text-slate-600 dark:text-slate-400">{s}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {/* Weaknesses - Red */}
+                              {analysis.weaknesses && analysis.weaknesses.length > 0 && (
+                                <div className="bg-red-50 dark:bg-red-950/30 p-3 rounded-lg border border-red-200 dark:border-red-800">
+                                  <span className="font-semibold text-red-700 dark:text-red-300 block mb-2">Weaknesses</span>
+                                  <ul className="list-disc list-inside space-y-1">
+                                    {analysis.weaknesses.map((w, i) => (
+                                      <li key={i} className="text-slate-600 dark:text-slate-400">{w}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Suggestions if available */}
+                            {analysis.suggestions && analysis.suggestions.length > 0 && (
+                              <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                                <span className="font-semibold text-blue-700 dark:text-blue-300 block mb-2">Suggestions</span>
+                                <ul className="list-disc list-inside space-y-1">
+                                  {analysis.suggestions.map((s, i) => (
+                                    <li key={i} className="text-slate-600 dark:text-slate-400">{s}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Criteria Scores if available */}
+                            {analysis.criteriaScores && Object.keys(analysis.criteriaScores).length > 0 && (
+                              <div className="bg-purple-50 dark:bg-purple-950/30 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
+                                <span className="font-semibold text-purple-700 dark:text-purple-300 block mb-2">Criteria Scores</span>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                  {Object.entries(analysis.criteriaScores).map(([criteria, score]) => (
+                                    <div key={criteria} className="flex justify-between items-center bg-white dark:bg-slate-900 px-2 py-1 rounded">
+                                      <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{criteria}</span>
+                                      <span className={`text-xs font-semibold ml-2 ${
+                                        score >= 4 ? 'text-green-600 dark:text-green-400' :
+                                        score >= 3 ? 'text-amber-600 dark:text-amber-400' :
+                                        'text-red-600 dark:text-red-400'
+                                      }`}>
+                                        {score}/5
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Confidence indicator */}
+                            {analysis.confidence !== undefined && (
+                              <div className="text-xs text-slate-500 dark:text-slate-500 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center gap-4">
+                                <span>
+                                  Confidence:{' '}
+                                  <span className={`font-medium ${
+                                    analysis.confidence >= 0.7 ? 'text-green-600 dark:text-green-400' :
+                                    analysis.confidence >= 0.5 ? 'text-yellow-600 dark:text-yellow-400' :
+                                    'text-red-600 dark:text-red-400'
+                                  }`}>
+                                    {Math.round(analysis.confidence * 100)}%
+                                  </span>
+                                </span>
+                                <span>Job ID: {review.id}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Expanded but no analysis data */}
+                      {isExpanded && !analysis && (
+                        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700">
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                            No detailed analysis available for this review.
+                          </p>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

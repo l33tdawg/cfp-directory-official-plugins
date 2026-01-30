@@ -74,14 +74,18 @@ export async function callAnthropic(opts: ProviderOptions): Promise<string> {
 
 /**
  * Call Google Gemini API
+ * Security: Uses x-goog-api-key header instead of query parameter to prevent
+ * API key exposure in logs, proxy caches, and browser history.
  */
 export async function callGemini(opts: ProviderOptions): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${opts.model}:generateContent?key=${opts.apiKey}`;
+  // Security: API key in header, not URL query string
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${opts.model}:generateContent`;
 
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'x-goog-api-key': opts.apiKey,
     },
     body: JSON.stringify({
       contents: [

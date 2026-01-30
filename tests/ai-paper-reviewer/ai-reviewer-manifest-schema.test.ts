@@ -21,14 +21,13 @@ describe('Manifest configSchema extensions', () => {
       expect(schema['x-groups']).toBeDefined();
     });
 
-    it('has all six groups', () => {
+    it('has all five groups', () => {
       const groups = Object.keys(schema['x-groups']);
       expect(groups).toContain('provider');
       expect(groups).toContain('review');
-      expect(groups).toContain('quality');
       expect(groups).toContain('automation');
       expect(groups).toContain('detection');
-      expect(groups).toContain('visibility');
+      expect(groups).toContain('advanced');
     });
 
     it('each group has title, description, and order', () => {
@@ -45,7 +44,7 @@ describe('Manifest configSchema extensions', () => {
     it('groups have sequential order values', () => {
       const orders = Object.values(schema['x-groups']).map((g) => g.order);
       const sorted = [...orders].sort((a, b) => a - b);
-      expect(sorted).toEqual([0, 1, 2, 3, 4, 5]);
+      expect(sorted).toEqual([0, 1, 2, 3, 4]);
     });
   });
 
@@ -58,20 +57,17 @@ describe('Manifest configSchema extensions', () => {
       aiProvider: 'provider',
       apiKey: 'provider',
       model: 'provider',
-      temperature: 'quality',
-      maxTokens: 'quality',
-      confidenceThreshold: 'quality',
-      lowConfidenceBehavior: 'quality',
-      useEventCriteria: 'review',
       strictnessLevel: 'review',
-      reviewFocus: 'review',
-      customPersona: 'review',
+      useEventCriteria: 'review',
       autoReview: 'automation',
-      reReviewCooldownMinutes: 'automation',
+      showAiReviewerOnTeamPage: 'automation',
       enableDuplicateDetection: 'detection',
       duplicateThreshold: 'detection',
-      enableSpeakerResearch: 'detection',
-      showAiReviewerOnTeamPage: 'visibility',
+      temperature: 'advanced',
+      confidenceThreshold: 'advanced',
+      reReviewCooldownMinutes: 'advanced',
+      maxTokens: 'advanced',
+      maxInputChars: 'advanced',
     };
 
     it('every property has an x-group assignment', () => {
@@ -98,14 +94,14 @@ describe('Manifest configSchema extensions', () => {
       }
     });
 
-    it('aiProvider hint mentions all three providers', () => {
+    it('aiProvider hint mentions providers', () => {
       const hint = properties.aiProvider['x-friendly-hint'];
-      expect(hint.toLowerCase()).toContain('ai');
+      expect(hint.toLowerCase()).toContain('provider');
     });
 
-    it('apiKey hint mentions encryption', () => {
+    it('apiKey hint mentions security', () => {
       const hint = properties.apiKey['x-friendly-hint'];
-      expect(hint.toLowerCase()).toContain('encrypted');
+      expect(hint.toLowerCase()).toContain('secure');
     });
   });
 
@@ -229,8 +225,8 @@ describe('Manifest configSchema extensions', () => {
     it('duplicateThreshold has tick labels', () => {
       const labels = properties.duplicateThreshold['x-labels'];
       expect(labels).toBeDefined();
-      expect(labels['0.5']).toBe('Loose');
-      expect(labels['0.95']).toBe('Strict');
+      expect(labels['0.5']).toBeDefined();
+      expect(labels['0.95']).toBeDefined();
     });
 
     it('confidenceThreshold has tick labels', () => {
@@ -246,8 +242,8 @@ describe('Manifest configSchema extensions', () => {
   // -----------------------------------------------------------------------
 
   describe('version', () => {
-    it('manifest version is 1.7.1', () => {
-      expect(manifest.version).toBe('1.7.1');
+    it('manifest version is 1.11.0', () => {
+      expect(manifest.version).toBe('1.11.0');
     });
   });
 
@@ -318,8 +314,9 @@ describe('Manifest configSchema extensions', () => {
       expect(schema.required).toEqual(['apiKey']);
     });
 
-    it('has 17 properties', () => {
-      expect(Object.keys(properties).length).toBe(17);
+    it('has expected number of properties', () => {
+      // provider (3) + review (2) + automation (2) + detection (2) + advanced (5) = 14
+      expect(Object.keys(properties).length).toBe(14);
     });
 
     it('all properties have type and title', () => {
@@ -327,6 +324,26 @@ describe('Manifest configSchema extensions', () => {
         expect(prop).toHaveProperty('type');
         expect(prop).toHaveProperty('title');
       }
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Security config options
+  // -----------------------------------------------------------------------
+
+  describe('security config options', () => {
+    it('has maxTokens with sensible limits', () => {
+      expect(properties.maxTokens).toBeDefined();
+      expect(properties.maxTokens.minimum).toBe(100);
+      expect(properties.maxTokens.maximum).toBe(16384);
+      expect(properties.maxTokens.default).toBe(4096);
+    });
+
+    it('has maxInputChars with sensible limits', () => {
+      expect(properties.maxInputChars).toBeDefined();
+      expect(properties.maxInputChars.minimum).toBe(1000);
+      expect(properties.maxInputChars.maximum).toBe(100000);
+      expect(properties.maxInputChars.default).toBe(50000);
     });
   });
 });

@@ -271,7 +271,7 @@ describe('Model Fetcher', () => {
       expect(modelIds).not.toContain('embedding-001');
     });
 
-    it('should include API key in URL', async () => {
+    it('should include API key in header (not URL) for security', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: true,
         status: 200,
@@ -280,9 +280,14 @@ describe('Model Fetcher', () => {
 
       await fetchGeminiModels('my-gemini-key');
 
+      // Security: API key should be in header, NOT in URL
       expect(fetchSpy).toHaveBeenCalledWith(
-        expect.stringContaining('key=my-gemini-key'),
-        expect.any(Object)
+        expect.not.stringContaining('key='),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'my-gemini-key',
+          }),
+        })
       );
     });
 

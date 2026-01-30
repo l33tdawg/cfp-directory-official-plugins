@@ -1,7 +1,7 @@
 {
   "name": "example-webhook",
   "displayName": "Example: Webhook Notifications",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": "1.0",
   "description": "A starter template for plugin developers. Demonstrates hooks, configuration schemas, HMAC signatures, and background job retries. Use this as a base for building your own plugins.",
   "author": "CFP Directory",
@@ -16,17 +16,26 @@
   ],
   "configSchema": {
     "type": "object",
+    "x-groups": {
+      "endpoint": { "title": "Webhook Endpoint", "description": "Configure your webhook destination", "order": 0 },
+      "privacy": { "title": "Privacy & Security", "description": "Control what data is sent", "order": 1 },
+      "reliability": { "title": "Reliability", "description": "Retry and delivery options", "order": 2 }
+    },
     "properties": {
       "webhookUrl": {
         "type": "string",
         "title": "Webhook URL",
-        "description": "The URL to send webhook payloads to (must be HTTPS)"
+        "description": "The URL to send webhook payloads to (HTTPS required)",
+        "x-group": "endpoint",
+        "x-friendly-hint": "Must be a public HTTPS URL. Private/internal addresses are blocked for security."
       },
       "secret": {
         "type": "string",
         "title": "Webhook Secret",
         "description": "Shared secret for HMAC signature verification",
-        "format": "password"
+        "format": "password",
+        "x-group": "endpoint",
+        "x-friendly-hint": "Used to sign payloads so you can verify they came from us."
       },
       "events": {
         "type": "array",
@@ -34,13 +43,31 @@
         "description": "Which events to send webhooks for",
         "items": {
           "type": "string"
-        }
+        },
+        "x-group": "endpoint"
+      },
+      "includeSpeakerPii": {
+        "type": "boolean",
+        "title": "Include Speaker Email/Name",
+        "description": "Send speaker email and name in webhook payloads (privacy-sensitive)",
+        "default": false,
+        "x-group": "privacy",
+        "x-friendly-hint": "⚠️ Disabled by default for GDPR/privacy compliance. Only enable if your webhook receiver needs this data."
+      },
+      "allowInsecureHttp": {
+        "type": "boolean",
+        "title": "Allow HTTP (Development Only)",
+        "description": "Allow non-HTTPS URLs (NOT recommended for production)",
+        "default": false,
+        "x-group": "privacy",
+        "x-friendly-hint": "⚠️ Only enable for local development. HTTPS is required in production for security."
       },
       "retryOnFailure": {
         "type": "boolean",
         "title": "Retry on Failure",
         "description": "Retry webhook delivery via background jobs if the initial request fails",
-        "default": true
+        "default": true,
+        "x-group": "reliability"
       }
     },
     "required": ["webhookUrl"]

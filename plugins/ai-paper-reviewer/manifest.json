@@ -1,7 +1,7 @@
 {
   "name": "ai-paper-reviewer",
   "displayName": "AI Paper Reviewer",
-  "version": "1.10.8",
+  "version": "1.11.0",
   "apiVersion": "1.0",
   "description": "Intelligent submission analysis with expandable review details, re-review capability, and criteria-based scoring",
   "author": "CFP Directory",
@@ -22,6 +22,16 @@
       "name": "list-models",
       "title": "List Available Models",
       "description": "Fetches available models from the configured AI provider"
+    },
+    {
+      "name": "clear-reviews",
+      "title": "Clear AI Reviews",
+      "description": "Deletes all AI-generated reviews for testing or reset purposes"
+    },
+    {
+      "name": "delete-review",
+      "title": "Delete AI Review",
+      "description": "Deletes a specific AI-generated review"
     }
   ],
   "sidebarItems": [
@@ -194,6 +204,26 @@
         "maximum": 60,
         "x-group": "advanced",
         "x-friendly-hint": "Prevents excessive API calls when authors make rapid edits."
+      },
+      "maxTokens": {
+        "type": "number",
+        "title": "Maximum Response Tokens",
+        "description": "Maximum tokens for AI response (100-16384)",
+        "default": 4096,
+        "minimum": 100,
+        "maximum": 16384,
+        "x-group": "advanced",
+        "x-friendly-hint": "Controls AI response length and cost. Default (4096) is sufficient for most reviews."
+      },
+      "maxInputChars": {
+        "type": "number",
+        "title": "Maximum Input Characters",
+        "description": "Maximum submission text size sent to AI (1000-100000)",
+        "default": 50000,
+        "minimum": 1000,
+        "maximum": 100000,
+        "x-group": "advanced",
+        "x-friendly-hint": "Long submissions are truncated to this limit. Default handles most submissions."
       }
     },
     "required": ["apiKey"]

@@ -279,12 +279,14 @@ export async function fetchGeminiModels(apiKey: string): Promise<FetchModelsResu
   }
 
   try {
+    // Security: API key in header, not URL query string (prevents log/proxy exposure)
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=100`,
+      `https://generativelanguage.googleapis.com/v1beta/models?pageSize=100`,
       {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
         },
       }
     );

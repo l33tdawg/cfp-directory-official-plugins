@@ -49,7 +49,23 @@ interface AiReviewerConfig {
   showAiReviewerOnTeamPage?: boolean;
   /** Re-review cooldown in minutes */
   reReviewCooldownMinutes?: number;
+  /** Maximum output tokens for AI response (default: 4096, max: 16384) */
+  maxTokens?: number;
+  /** Maximum input characters for submission text (default: 50000, max: 100000) */
+  maxInputChars?: number;
 }
+
+// =============================================================================
+// SECURITY CONSTANTS
+// =============================================================================
+
+/** Default and maximum limits for AI requests to prevent cost/resource abuse */
+const AI_LIMITS = {
+  DEFAULT_MAX_TOKENS: 4096,
+  MAX_MAX_TOKENS: 16384,
+  DEFAULT_MAX_INPUT_CHARS: 50000,
+  MAX_MAX_INPUT_CHARS: 100000,
+} as const;
 
 // =============================================================================
 // ANALYSIS RESULT TYPE
@@ -111,13 +127,25 @@ export async function callAiProvider(
   config: AiReviewerConfig,
   submissionText: string,
   systemPrompt?: string
-): Promise<{ result: AiAnalysisResult; rawResponse: string }> {
+): Promise<{ result: AiAnalysisResult; rawResponse: string; inputTruncated: boolean }> {
   const provider = config.aiProvider || 'openai';
   const model = config.model || 'gpt-4o';
-  // Use generous maxTokens to ensure complete, detailed reviews with excellent analysis
-  // At current model costs (2025-2026), even 50k tokens is just cents per review
-  // This ensures the AI has full capacity for thorough, insightful feedback
-  const maxTokens = 50000;
+
+  // Security: Configurable maxTokens with enforced upper bound to prevent cost abuse
+  const configuredMaxTokens = config.maxTokens ?? AI_LIMITS.DEFAULT_MAX_TOKENS;
+  const maxTokens = Math.min(Math.max(100, configuredMaxTokens), AI_LIMITS.MAX_MAX_TOKENS);
+
+  // Security: Enforce input size limit to prevent resource exhaustion
+  const configuredMaxInput = config.maxInputChars ?? AI_LIMITS.DEFAULT_MAX_INPUT_CHARS;
+  const maxInputChars = Math.min(Math.max(1000, configuredMaxInput), AI_LIMITS.MAX_MAX_INPUT_CHARS);
+
+  let inputTruncated = false;
+  let processedText = submissionText;
+  if (submissionText.length > maxInputChars) {
+    processedText = submissionText.slice(0, maxInputChars) + '\n\n[Content truncated due to length limit]';
+    inputTruncated = true;
+  }
+
   const temperature = config.temperature ?? 0.3;
   const prompt = systemPrompt || buildSystemPrompt();
 
@@ -127,7 +155,7 @@ export async function callAiProvider(
     maxTokens,
     temperature,
     systemPrompt: prompt,
-    userContent: submissionText,
+    userContent: processedText,
   });
 
   // Create a repair function that asks the AI to fix broken JSON
@@ -150,37 +178,58 @@ export async function callAiProvider(
   // Normalize scores - keep one decimal place for accuracy
   const clamp = (v: number) => Math.round(Math.max(1, Math.min(5, v)) * 10) / 10;
 
-  const criteriaScores: Record<string, number> = {};
-  if (parsed.criteriaScores && typeof parsed.criteriaScores === 'object') {
+  // Security: Dangerous keys that could cause prototype pollution
+  const DANGEROUS_KEYS = ['__proto__', 'prototype', 'constructor'];
+
+  // Security: Use Object.create(null) to prevent prototype pollution
+  const criteriaScores: Record<string, number> = Object.create(null);
+  if (parsed.criteriaScores && typeof parsed.criteriaScores === 'object' && !Array.isArray(parsed.criteriaScores)) {
     for (const [name, score] of Object.entries(parsed.criteriaScores)) {
-      criteriaScores[name] = clamp(score as number);
+      // Security: Reject dangerous keys that could pollute prototype
+      if (DANGEROUS_KEYS.includes(name)) {
+        continue;
+      }
+      // Security: Validate score is actually a number
+      if (typeof score === 'number' && !isNaN(score)) {
+        criteriaScores[name] = clamp(score);
+      }
     }
   }
 
   // Backward compat: if old-style fixed scores exist, use them
   if (Object.keys(criteriaScores).length === 0) {
-    if (parsed.contentScore !== undefined) criteriaScores['Content Quality'] = clamp(parsed.contentScore);
-    if (parsed.presentationScore !== undefined) criteriaScores['Presentation Clarity'] = clamp(parsed.presentationScore);
-    if (parsed.relevanceScore !== undefined) criteriaScores['Relevance'] = clamp(parsed.relevanceScore);
-    if (parsed.originalityScore !== undefined) criteriaScores['Originality'] = clamp(parsed.originalityScore);
+    if (typeof parsed.contentScore === 'number') criteriaScores['Content Quality'] = clamp(parsed.contentScore);
+    if (typeof parsed.presentationScore === 'number') criteriaScores['Presentation Clarity'] = clamp(parsed.presentationScore);
+    if (typeof parsed.relevanceScore === 'number') criteriaScores['Relevance'] = clamp(parsed.relevanceScore);
+    if (typeof parsed.originalityScore === 'number') criteriaScores['Originality'] = clamp(parsed.originalityScore);
   }
+
+  // Security: Validate and sanitize AI response fields to prevent type confusion
+  const validateStringArray = (arr: unknown): string[] => {
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((item): item is string => typeof item === 'string').slice(0, 20); // Cap array size
+  };
+
+  const validateString = (val: unknown, defaultVal: string): string => {
+    return typeof val === 'string' ? val.slice(0, 10000) : defaultVal; // Cap string length
+  };
 
   const result: AiAnalysisResult = {
     criteriaScores,
-    overallScore: clamp(parsed.overallScore || 3),
-    summary: parsed.summary || '',
-    strengths: parsed.strengths || [],
-    weaknesses: parsed.weaknesses || [],
-    suggestions: parsed.suggestions || [],
-    recommendation: parsed.recommendation || 'NEUTRAL',
-    confidence: Math.max(0, Math.min(1, parsed.confidence ?? 0.8)),
+    overallScore: typeof parsed.overallScore === 'number' ? clamp(parsed.overallScore) : 3,
+    summary: validateString(parsed.summary, ''),
+    strengths: validateStringArray(parsed.strengths),
+    weaknesses: validateStringArray(parsed.weaknesses),
+    suggestions: validateStringArray(parsed.suggestions),
+    recommendation: validateString(parsed.recommendation, 'NEUTRAL'),
+    confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0.8,
     rawResponse,
     parseAttempts,
     repairApplied,
     analyzedAt: new Date().toISOString(),
   };
 
-  return { result, rawResponse };
+  return { result, rawResponse, inputTruncated };
 }
 
 /** Raw shape the AI might return (flexible) */
@@ -243,9 +292,9 @@ const plugin: Plugin = {
       // Store the service account ID for use in reviews
       await ctx.data.set('config', 'service-account-id', serviceAccount.id);
 
+      // Security: Don't log email - only log ID
       ctx.logger.info('AI Paper Reviewer service account ready', {
         userId: serviceAccount.id,
-        email: serviceAccount.email,
       });
     } catch (error) {
       ctx.logger.error('Failed to create service account', {
@@ -474,6 +523,115 @@ const plugin: Plugin = {
 
       return result;
     },
+
+    'clear-reviews': async (
+      ctx: PluginContext,
+      _params: Record<string, unknown>
+    ): Promise<{ success: boolean; deletedCount?: number; error?: string }> => {
+      try {
+        // Get the service account ID
+        const serviceAccountId = await ctx.data.get<string>('config', 'service-account-id');
+
+        if (!serviceAccountId) {
+          return { success: false, error: 'AI reviewer service account not found' };
+        }
+
+        ctx.logger.info('Clearing all AI reviews', { serviceAccountId });
+
+        // Get all reviews from the AI reviewer
+        const allReviews = await ctx.reviews.list({ reviewerId: serviceAccountId });
+
+        let deletedCount = 0;
+        for (const review of allReviews) {
+          try {
+            await ctx.reviews.delete(review.id);
+            deletedCount++;
+          } catch (err) {
+            ctx.logger.warn('Failed to delete review', {
+              reviewId: review.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
+        // Also clear job history for this plugin
+        try {
+          const pendingJobs = await ctx.jobs!.getJobs('pending');
+          const completedJobs = await ctx.jobs!.getJobs('completed');
+          const failedJobs = await ctx.jobs!.getJobs('failed');
+
+          const allJobs = [...pendingJobs, ...completedJobs, ...failedJobs];
+          for (const job of allJobs) {
+            if (job.type === 'ai-review') {
+              try {
+                await ctx.jobs!.cancelJob(job.id);
+              } catch {
+                // Job might already be completed/cancelled
+              }
+            }
+          }
+        } catch {
+          ctx.logger.warn('Failed to clear job history');
+        }
+
+        ctx.logger.info('Cleared AI reviews', { deletedCount });
+
+        return { success: true, deletedCount };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.logger.error('Failed to clear AI reviews', { error: message });
+        return { success: false, error: message };
+      }
+    },
+
+    'delete-review': async (
+      ctx: PluginContext,
+      params: { reviewId?: string }
+    ): Promise<{ success: boolean; error?: string }> => {
+      const { reviewId } = params;
+
+      if (!reviewId) {
+        return { success: false, error: 'Review ID is required' };
+      }
+
+      try {
+        // Get the service account ID to verify this is an AI review
+        const serviceAccountId = await ctx.data.get<string>('config', 'service-account-id');
+
+        if (!serviceAccountId) {
+          return { success: false, error: 'AI reviewer service account not found' };
+        }
+
+        // Security/Performance: Fetch review by ID directly instead of listing all reviews
+        // Use the reviews.get method if available, otherwise use targeted list
+        let review;
+        if (typeof ctx.reviews.get === 'function') {
+          review = await ctx.reviews.get(reviewId);
+        } else {
+          // Fallback: use list with reviewerId filter for efficiency
+          const aiReviews = await ctx.reviews.list({ reviewerId: serviceAccountId });
+          review = aiReviews.find(r => r.id === reviewId);
+        }
+
+        if (!review) {
+          return { success: false, error: 'Review not found' };
+        }
+
+        // Security: Only verify by reviewerId, not content pattern (which can be spoofed)
+        if (review.reviewerId !== serviceAccountId) {
+          return { success: false, error: 'Can only delete AI-generated reviews' };
+        }
+
+        await ctx.reviews.delete(reviewId);
+        ctx.logger.info('Deleted AI review', { reviewId });
+
+        return { success: true };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.logger.error('Failed to delete AI review', { reviewId, error: message });
+        return { success: false, error: message };
+      }
+    },
   },
 };
 
@@ -505,12 +663,12 @@ export async function handleAiReviewJob(
   // Always fetch submission data to ensure we have complete info
   try {
     const submission = await ctx.submissions.get(submissionId);
+    // Security: Don't log content previews - only log metadata
     ctx.logger.info('Submission fetch result', {
       submissionId,
       found: !!submission,
       hasAbstract: !!submission?.abstract,
       abstractLength: submission?.abstract?.length || 0,
-      abstractPreview: submission?.abstract?.substring(0, 100) || 'NO ABSTRACT',
     });
     if (submission) {
       submissionData = {
@@ -611,7 +769,7 @@ export async function handleAiReviewJob(
     });
 
     // 5. Call AI with temperature and parse with retry
-    const { result } = await callAiProvider(config, submissionText, systemPrompt);
+    const { result, inputTruncated } = await callAiProvider(config, submissionText, systemPrompt);
 
     // 6. Attach similar submissions to result
     if (similarSubmissions.length > 0) {
@@ -623,6 +781,7 @@ export async function handleAiReviewJob(
       overallScore: result.overallScore,
       recommendation: result.recommendation,
       confidence: result.confidence,
+      inputTruncated,
     });
 
     // Strip rawResponse before persisting to job results

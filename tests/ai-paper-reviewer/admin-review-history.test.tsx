@@ -21,6 +21,7 @@ vi.mock('lucide-react', () => ({
   XCircle: () => <span data-testid="icon-x" />,
   TrendingUp: () => <span data-testid="icon-trending" />,
   FileText: () => <span data-testid="icon-file" />,
+  Trash2: () => <span data-testid="icon-trash" />,
 }));
 
 // Mock plugin types

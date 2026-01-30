@@ -28,6 +28,7 @@ import {
   RotateCcw,
   ChevronDown,
   ChevronUp,
+  Trash2,
 } from 'lucide-react';
 import type { PluginComponentProps } from '@/lib/plugins';
 
@@ -248,6 +249,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [expandedReviews, setExpandedReviews] = useState<Set<string>>(new Set());
   const [reReviewingIds, setReReviewingIds] = useState<Set<string>>(new Set());
   const [reReviewingAll, setReReviewingAll] = useState(false);
+  const [clearingReviews, setClearingReviews] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Password fields are redacted on client, so check via plugin data
   // Fall back to checking config.apiKey in case it's not redacted
@@ -709,7 +712,35 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     }
   };
 
-  const getRecommendationColor = (rec: string | null) => {
+  // Clear all AI reviews
+  const clearAllReviews = async () => {
+    setClearingReviews(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/plugins/${context.pluginId}/actions/clear-reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to clear reviews');
+      }
+
+      // Refresh data to reflect the cleared state
+      await fetchData();
+      setShowClearConfirm(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear reviews');
+    } finally {
+      setClearingReviews(false);
+    }
+  };
+
+  const _getRecommendationColor = (rec: string | null) => {
     if (!rec) return 'text-slate-500';
     if (rec.includes('ACCEPT')) return 'text-green-600 dark:text-green-400';
     if (rec.includes('REJECT')) return 'text-red-600 dark:text-red-400';
@@ -742,6 +773,52 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
             <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Reviews Confirmation Dialog */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 max-w-md mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 dark:bg-red-900/50 rounded-full">
+                <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Clear All AI Reviews?
+              </h3>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              This will permanently delete all {reviewStats.totalReviews} AI-generated reviews and clear the job history.
+              This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                disabled={clearingReviews}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={clearAllReviews}
+                disabled={clearingReviews}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 transition-colors"
+              >
+                {clearingReviews ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Clearing...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    Clear All Reviews
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -940,6 +1017,15 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                   <Settings className="h-4 w-4" />
                   Settings
                 </a>
+                {reviewStats.totalReviews > 0 && (
+                  <button
+                    onClick={() => setShowClearConfirm(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Clear Reviews
+                  </button>
+                )}
               </div>
             </div>
           </div>

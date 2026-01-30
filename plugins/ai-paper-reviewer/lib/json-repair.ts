@@ -79,7 +79,9 @@ export async function parseWithRetry<T>(
     }
   }
 
+  // Security: Don't include raw response in thrown errors to prevent data leakage
+  // through error surfaces (job history, admin UI, logs)
   throw new Error(
-    `Failed to parse JSON after ${attempts} attempts. Raw response: ${rawText.slice(0, 200)}`
+    `Failed to parse JSON after ${attempts} attempts. Response length: ${rawText.length} chars`
   );
 }

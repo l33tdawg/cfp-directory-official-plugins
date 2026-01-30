@@ -74,6 +74,16 @@ interface SubmissionStats {
   unreviewed: number;
 }
 
+interface ActiveJob {
+  id: string;
+  status: 'pending' | 'running';
+  title: string;
+  submissionId: string;
+  createdAt: string;
+  startedAt: string | null;
+  attempts: number;
+}
+
 export function AdminDashboard({ context, data }: PluginComponentProps) {
   const pluginBasePath = (data?.pluginBasePath as string) || '/admin/plugins/pages';
   const [loading, setLoading] = useState(true);
@@ -100,6 +110,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [queueingAll, setQueueingAll] = useState(false);
   const [queueingIds, setQueueingIds] = useState<Set<string>>(new Set());
   const [apiKeyConfigured, setApiKeyConfigured] = useState<boolean | null>(null);
+  const [activeJobs, setActiveJobs] = useState<ActiveJob[]>([]);
 
   // Password fields are redacted on client, so check via plugin data
   // Fall back to checking config.apiKey in case it's not redacted
@@ -164,6 +175,40 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         failedToday,
       });
 
+      // Extract active jobs (pending + running) for display
+      const active: ActiveJob[] = [
+        ...runningJobs.map((job: {
+          id: string;
+          payload: { title?: string; submissionId?: string };
+          createdAt: string;
+          startedAt?: string | null;
+          attempts: number;
+        }) => ({
+          id: job.id,
+          status: 'running' as const,
+          title: job.payload.title || 'Untitled',
+          submissionId: job.payload.submissionId || '',
+          createdAt: job.createdAt,
+          startedAt: job.startedAt || null,
+          attempts: job.attempts,
+        })),
+        ...pendingJobs.slice(0, 5).map((job: {
+          id: string;
+          payload: { title?: string; submissionId?: string };
+          createdAt: string;
+          attempts: number;
+        }) => ({
+          id: job.id,
+          status: 'pending' as const,
+          title: job.payload.title || 'Untitled',
+          submissionId: job.payload.submissionId || '',
+          createdAt: job.createdAt,
+          startedAt: null,
+          attempts: job.attempts,
+        })),
+      ];
+      setActiveJobs(active);
+
       // Calculate review stats
       const totalReviews = completedJobs.length + failedJobs.length;
       const successRate = totalReviews > 0 ? (completedJobs.length / totalReviews) * 100 : 0;
@@ -223,6 +268,16 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Auto-refresh when there are running jobs (every 5 seconds)
+  useEffect(() => {
+    if (jobStats.running > 0 || jobStats.pending > 0) {
+      const interval = setInterval(() => {
+        fetchData();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [jobStats.running, jobStats.pending, fetchData]);
 
   const queueReview = async (submission: UnreviewedSubmission) => {
     setQueueingIds((prev) => new Set(prev).add(submission.id));
@@ -530,6 +585,72 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
               </div>
             </div>
           </div>
+
+          {/* Jobs in Progress - Active Jobs */}
+          {activeJobs.length > 0 && (
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="jobs-in-progress">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      Jobs in Progress ({activeJobs.length})
+                    </h3>
+                  </div>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Auto-refreshing every 5s
+                  </span>
+                </div>
+              </div>
+              <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                {activeJobs.map((job) => (
+                  <div
+                    key={job.id}
+                    className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        {job.status === 'running' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Analyzing
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                            <Clock className="h-3 w-3" />
+                            Queued
+                          </span>
+                        )}
+                        <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                          {job.title}
+                        </p>
+                      </div>
+                      <div className="mt-1 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                        <span>
+                          {job.status === 'running' ? 'Started' : 'Queued'}{' '}
+                          {new Date(job.status === 'running' && job.startedAt ? job.startedAt : job.createdAt).toLocaleTimeString()}
+                        </span>
+                        {job.attempts > 1 && (
+                          <span className="text-amber-600 dark:text-amber-400">
+                            Attempt {job.attempts}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {job.status === 'running' && (
+                      <div className="ml-4 flex items-center gap-2">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
+                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Review Queue - Unreviewed Submissions */}
           {submissionStats.unreviewed > 0 && (

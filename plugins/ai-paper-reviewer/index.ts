@@ -462,16 +462,10 @@ const plugin: Plugin = {
         };
       }
 
-      ctx.logger.info('Fetching models for provider', { provider });
-
       const result = await fetchModelsForProvider(provider, apiKey);
 
-      if (result.success) {
-        ctx.logger.info('Successfully fetched models', {
-          provider,
-          modelCount: result.models?.length || 0,
-        });
-      } else {
+      // Only log failures - success logs were too noisy
+      if (!result.success) {
         ctx.logger.warn('Failed to fetch models', {
           provider,
           error: result.error?.message,

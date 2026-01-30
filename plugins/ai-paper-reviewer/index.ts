@@ -502,26 +502,34 @@ export async function handleAiReviewJob(
     prerequisites: payload.prerequisites as string | null,
   };
 
-  if (!submissionData.abstract || payload.isReReview) {
-    try {
-      const submission = await ctx.submissions.get(submissionId);
-      if (submission) {
-        submissionData = {
-          title: submission.title,
-          abstract: submission.abstract,
-          outline: (submission as Record<string, unknown>).outline as string | null,
-          targetAudience: (submission as Record<string, unknown>).targetAudience as string | null,
-          prerequisites: (submission as Record<string, unknown>).prerequisites as string | null,
-        };
-        // Also get eventId from submission if not provided
-        if (!eventId) {
-          eventId = submission.eventId;
-        }
-        ctx.logger.info('Fetched submission data for review', { submissionId, hasAbstract: !!submission.abstract });
+  // Always fetch submission data to ensure we have complete info
+  try {
+    const submission = await ctx.submissions.get(submissionId);
+    ctx.logger.info('Submission fetch result', {
+      submissionId,
+      found: !!submission,
+      hasAbstract: !!submission?.abstract,
+      abstractLength: submission?.abstract?.length || 0,
+      abstractPreview: submission?.abstract?.substring(0, 100) || 'NO ABSTRACT',
+    });
+    if (submission) {
+      submissionData = {
+        title: submission.title,
+        abstract: submission.abstract,
+        outline: (submission as Record<string, unknown>).outline as string | null,
+        targetAudience: (submission as Record<string, unknown>).targetAudience as string | null,
+        prerequisites: (submission as Record<string, unknown>).prerequisites as string | null,
+      };
+      // Also get eventId from submission if not provided
+      if (!eventId) {
+        eventId = submission.eventId;
       }
-    } catch (err) {
-      ctx.logger.warn('Failed to fetch submission, using payload data', { submissionId });
     }
+  } catch (err) {
+    ctx.logger.warn('Failed to fetch submission', {
+      submissionId,
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 
   // Update API key configuration status (for dashboard display)

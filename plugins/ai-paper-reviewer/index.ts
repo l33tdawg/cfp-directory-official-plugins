@@ -31,23 +31,20 @@ const manifest: PluginManifest = manifestJson as PluginManifest;
 // =============================================================================
 
 interface AiReviewerConfig {
-  /** @deprecated Use aiProvider */
   aiProvider?: 'openai' | 'anthropic' | 'gemini';
   apiKey?: string;
   model?: string;
   temperature?: number;
-  maxTokens?: number;
   autoReview?: boolean;
-  analysisPrompt?: string;
   useEventCriteria?: boolean;
   strictnessLevel?: 'lenient' | 'moderate' | 'strict';
-  reviewFocus?: string[];
+  /** Custom persona - managed via the Personas page, not settings form */
   customPersona?: string;
+  /** Review focus areas - internal use */
+  reviewFocus?: string[];
   enableDuplicateDetection?: boolean;
   duplicateThreshold?: number;
-  enableSpeakerResearch?: boolean;
   confidenceThreshold?: number;
-  lowConfidenceBehavior?: 'hide' | 'warn' | 'require_override';
   /** Show AI reviewer on public team/reviewers page */
   showAiReviewerOnTeamPage?: boolean;
   /** Re-review cooldown in minutes */
@@ -117,7 +114,10 @@ export async function callAiProvider(
 ): Promise<{ result: AiAnalysisResult; rawResponse: string }> {
   const provider = config.aiProvider || 'openai';
   const model = config.model || 'gpt-4o';
-  const maxTokens = config.maxTokens || 2000;
+  // Use generous maxTokens to ensure complete, detailed reviews with excellent analysis
+  // At current model costs (2025-2026), even 50k tokens is just cents per review
+  // This ensures the AI has full capacity for thorough, insightful feedback
+  const maxTokens = 50000;
   const temperature = config.temperature ?? 0.3;
   const prompt = systemPrompt || buildSystemPrompt();
 
@@ -147,8 +147,8 @@ export async function callAiProvider(
     repairFn
   );
 
-  // Normalize scores
-  const clamp = (v: number) => Math.max(1, Math.min(5, Math.round(v)));
+  // Normalize scores - keep one decimal place for accuracy
+  const clamp = (v: number) => Math.round(Math.max(1, Math.min(5, v)) * 10) / 10;
 
   const criteriaScores: Record<string, number> = {};
   if (parsed.criteriaScores && typeof parsed.criteriaScores === 'object') {
@@ -216,6 +216,23 @@ const plugin: Plugin = {
   async onEnable(ctx: PluginContext) {
     const config = ctx.config as AiReviewerConfig;
 
+    // Register job handler for AI reviews
+    ctx.logger.info('Attempting to register job handler', { hasJobs: !!ctx.jobs });
+    if (ctx.jobs) {
+      try {
+        ctx.jobs.registerHandler('ai-review', async (payload) => {
+          return handleAiReviewJob(payload, ctx);
+        });
+        ctx.logger.info('Registered ai-review job handler successfully');
+      } catch (err) {
+        ctx.logger.error('Failed to register job handler', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } else {
+      ctx.logger.error('ctx.jobs is undefined - cannot register job handler');
+    }
+
     // Create or retrieve the AI reviewer service account
     try {
       const serviceAccount = await ctx.users.createServiceAccount({
@@ -252,6 +269,11 @@ const plugin: Plugin = {
   },
 
   async onDisable(ctx: PluginContext) {
+    // Unregister job handler
+    if (ctx.jobs) {
+      ctx.jobs.unregisterHandler('ai-review');
+      ctx.logger.debug('Unregistered ai-review job handler');
+    }
     ctx.logger.info('AI Paper Reviewer disabled');
   },
 
@@ -285,6 +307,7 @@ const plugin: Plugin = {
         payload: {
           submissionId: payload.submission.id,
           eventId: payload.event.id,
+          eventSlug: payload.event.slug,
           title: payload.submission.title,
           abstract: payload.submission.abstract,
           outline: (payload.submission as Record<string, unknown>).outline || null,
@@ -355,11 +378,24 @@ const plugin: Plugin = {
         submissionId,
       });
 
+      // Get event slug for linking
+      const eventId = (payload.submission as Record<string, unknown>).eventId as string | null;
+      let eventSlug: string | null = null;
+      if (eventId) {
+        try {
+          const event = await ctx.events.get(eventId);
+          eventSlug = event?.slug || null;
+        } catch {
+          ctx.logger.warn('Could not fetch event slug for submission update');
+        }
+      }
+
       await ctx.jobs!.enqueue({
         type: 'ai-review',
         payload: {
           submissionId,
-          eventId: (payload.submission as Record<string, unknown>).eventId || null,
+          eventId,
+          eventSlug,
           title: payload.submission.title,
           abstract: payload.submission.abstract,
           outline: (payload.submission as Record<string, unknown>).outline || null,
@@ -410,7 +446,11 @@ const plugin: Plugin = {
       const config = ctx.config as AiReviewerConfig;
       const provider = params.provider || config.aiProvider || 'openai';
       // Prefer apiKey from params (form's current value) over saved config
-      const apiKey = params.apiKey || config.apiKey;
+      // BUT ignore the placeholder value which indicates a masked password field
+      const PASSWORD_PLACEHOLDER = '********';
+      const apiKey = (params.apiKey && params.apiKey !== PASSWORD_PLACEHOLDER)
+        ? params.apiKey
+        : config.apiKey;
 
       if (!apiKey) {
         return {
@@ -572,27 +612,36 @@ export async function handleAiReviewJob(
         };
         const mappedRecommendation = recommendationMap[result.recommendation.toUpperCase()] || 'NEUTRAL';
 
-        // Build detailed private notes with AI analysis
-        const privateNotes = [
-          `## AI Analysis Summary`,
-          result.summary,
-          '',
-          `### Strengths`,
-          ...result.strengths.map((s) => `- ${s}`),
-          '',
-          `### Weaknesses`,
-          ...result.weaknesses.map((w) => `- ${w}`),
-          '',
-          `### Suggestions`,
-          ...result.suggestions.map((s) => `- ${s}`),
-          '',
-          `---`,
-          `*Confidence: ${(result.confidence * 100).toFixed(0)}%*`,
-          `*Model: ${config.model || 'gpt-4o'}*`,
-        ].join('\n');
+        // Build detailed private notes with AI analysis (only include sections with content)
+        const privateNoteParts = [`## AI Analysis Summary`, result.summary || 'No summary available.', ''];
 
-        // Build public notes (shorter summary for speaker feedback)
-        const publicNotes = result.summary;
+        if (result.strengths && result.strengths.length > 0) {
+          privateNoteParts.push(`### Strengths`);
+          privateNoteParts.push(...result.strengths.map((s) => `- ${s}`));
+          privateNoteParts.push('');
+        }
+
+        if (result.weaknesses && result.weaknesses.length > 0) {
+          privateNoteParts.push(`### Weaknesses`);
+          privateNoteParts.push(...result.weaknesses.map((w) => `- ${w}`));
+          privateNoteParts.push('');
+        }
+
+        if (result.suggestions && result.suggestions.length > 0) {
+          privateNoteParts.push(`### Suggestions`);
+          privateNoteParts.push(...result.suggestions.map((s) => `- ${s}`));
+          privateNoteParts.push('');
+        }
+
+        privateNoteParts.push(`---`);
+        privateNoteParts.push(`*Confidence: ${(result.confidence * 100).toFixed(0)}%*`);
+        privateNoteParts.push(`*Model: ${config.model || 'gpt-4o'}*`);
+
+        const privateNotes = privateNoteParts.join('\n');
+
+        // Public notes should NOT contain AI analysis - leave empty for speakers
+        // Admin can choose to share specific feedback manually if desired
+        const publicNotes = undefined;
 
         // Extract scores from criteriaScores if available
         const criteriaScores = result.criteriaScores || {};
@@ -628,10 +677,14 @@ export async function handleAiReviewJob(
       });
     }
 
+    // Get eventSlug from payload for linking
+    const eventSlug = payload.eventSlug as string | undefined;
+
     return {
       success: true,
       data: {
         submissionId,
+        eventSlug,
         reviewId,
         analysis: sanitizedAnalysis,
         analyzedAt: result.analyzedAt,

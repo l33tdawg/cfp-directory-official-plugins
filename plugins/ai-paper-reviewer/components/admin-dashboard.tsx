@@ -25,6 +25,9 @@ import {
   Play,
   PlayCircle,
   FileText,
+  RotateCcw,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import type { PluginComponentProps } from '@/lib/plugins';
 
@@ -44,13 +47,99 @@ interface ReviewStats {
 interface RecentReview {
   id: string;
   title: string;
+  submissionId: string | null;
+  eventSlug: string | null;
   score: number | null;
   recommendation: string | null;
   status: string;
   completedAt: string | null;
 }
 
-interface UnreviewedSubmission {
+interface JobResultData {
+  success?: boolean;
+  data?: {
+    submissionId?: string;
+    eventSlug?: string;
+    analysis?: {
+      overallScore?: number;
+      recommendation?: string;
+    };
+    // Direct fields in data (some formats)
+    overallScore?: number;
+    recommendation?: string;
+  };
+  // Old format fields (direct on result)
+  submissionId?: string;
+  eventSlug?: string;
+  analysis?: {
+    overallScore?: number;
+    recommendation?: string;
+  };
+  // Very old format - direct on result
+  overallScore?: number;
+  recommendation?: string;
+}
+
+/**
+ * Helper to extract analysis from job result (handles multiple formats)
+ * Supports:
+ * - New format: { success, data: { analysis: { overallScore } } }
+ * - Data direct: { success, data: { overallScore } }
+ * - Old format: { analysis: { overallScore } }
+ * - Direct: { overallScore }
+ */
+function getAnalysisFromJobResult(result: JobResultData | null): {
+  score: number | null;
+  recommendation: string | null;
+  submissionId: string | null;
+  eventSlug: string | null;
+} {
+  if (!result) return { score: null, recommendation: null, submissionId: null, eventSlug: null };
+
+  // New format: result.data.analysis
+  if (result.data?.analysis?.overallScore !== undefined) {
+    return {
+      score: result.data.analysis.overallScore,
+      recommendation: result.data.analysis.recommendation ?? null,
+      submissionId: result.data.submissionId ?? null,
+      eventSlug: result.data.eventSlug ?? null,
+    };
+  }
+
+  // Data direct format: result.data.overallScore
+  if (result.data?.overallScore !== undefined) {
+    return {
+      score: result.data.overallScore,
+      recommendation: result.data.recommendation ?? null,
+      submissionId: result.data.submissionId ?? null,
+      eventSlug: result.data.eventSlug ?? null,
+    };
+  }
+
+  // Old format: result.analysis
+  if (result.analysis?.overallScore !== undefined) {
+    return {
+      score: result.analysis.overallScore,
+      recommendation: result.analysis.recommendation ?? null,
+      submissionId: result.submissionId ?? null,
+      eventSlug: result.eventSlug ?? null,
+    };
+  }
+
+  // Very old format: direct on result
+  if (result.overallScore !== undefined) {
+    return {
+      score: result.overallScore,
+      recommendation: result.recommendation ?? null,
+      submissionId: result.submissionId ?? null,
+      eventSlug: result.eventSlug ?? null,
+    };
+  }
+
+  return { score: null, recommendation: null, submissionId: null, eventSlug: null };
+}
+
+interface SubmissionWithReview {
   id: string;
   title: string;
   abstract: string;
@@ -64,8 +153,12 @@ interface UnreviewedSubmission {
     jobId?: string;
     score?: number | null;
     recommendation?: string | null;
+    reviewedAt?: string | null;
   };
 }
+
+// Alias for backwards compatibility
+type UnreviewedSubmission = SubmissionWithReview;
 
 interface SubmissionStats {
   total: number;
@@ -111,6 +204,10 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [queueingIds, setQueueingIds] = useState<Set<string>>(new Set());
   const [apiKeyConfigured, setApiKeyConfigured] = useState<boolean | null>(null);
   const [activeJobs, setActiveJobs] = useState<ActiveJob[]>([]);
+  const [reviewedSubmissions, setReviewedSubmissions] = useState<SubmissionWithReview[]>([]);
+  const [selectedForReReview, setSelectedForReReview] = useState<Set<string>>(new Set());
+  const [reReviewingAll, setReReviewingAll] = useState(false);
+  const [showReviewedSection, setShowReviewedSection] = useState(false);
 
   // Password fields are redacted on client, so check via plugin data
   // Fall back to checking config.apiKey in case it's not redacted
@@ -119,6 +216,122 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const apiKeyStatusKnown = apiKeyConfigured !== null || Boolean(context.config.apiKey);
   const provider = (context.config.aiProvider as string) || 'openai';
   const model = (context.config.model as string) || 'gpt-4o';
+
+  // Fetch only active jobs (for auto-refresh without full loading state)
+  const fetchActiveJobs = useCallback(async () => {
+    try {
+      const [pendingRes, runningRes, completedRes, failedRes] = await Promise.all([
+        fetch(`/api/plugins/${context.pluginId}/jobs?status=pending&type=ai-review&limit=100`),
+        fetch(`/api/plugins/${context.pluginId}/jobs?status=running&type=ai-review&limit=100`),
+        fetch(`/api/plugins/${context.pluginId}/jobs?status=completed&type=ai-review&limit=100`),
+        fetch(`/api/plugins/${context.pluginId}/jobs?status=failed&type=ai-review&limit=100`),
+      ]);
+
+      const [pendingData, runningData, completedData, failedData] = await Promise.all([
+        pendingRes.json(),
+        runningRes.json(),
+        completedRes.json(),
+        failedRes.json(),
+      ]);
+
+      const pendingJobs = pendingData.jobs || [];
+      const runningJobs = runningData.jobs || [];
+      const completedJobs = completedData.jobs || [];
+      const failedJobs = failedData.jobs || [];
+
+      // Calculate today's stats
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const completedToday = completedJobs.filter(
+        (job: { completedAt: string }) =>
+          job.completedAt && new Date(job.completedAt) >= today
+      ).length;
+
+      const failedToday = failedJobs.filter(
+        (job: { completedAt: string }) =>
+          job.completedAt && new Date(job.completedAt) >= today
+      ).length;
+
+      setJobStats({
+        pending: pendingJobs.length,
+        running: runningJobs.length,
+        completedToday,
+        failedToday,
+      });
+
+      // Extract active jobs for display
+      const active: ActiveJob[] = [
+        ...runningJobs.map((job: {
+          id: string;
+          payload: { title?: string; submissionId?: string };
+          createdAt: string;
+          startedAt?: string | null;
+          attempts: number;
+        }) => ({
+          id: job.id,
+          status: 'running' as const,
+          title: job.payload.title || 'Untitled',
+          submissionId: job.payload.submissionId || '',
+          createdAt: job.createdAt,
+          startedAt: job.startedAt || null,
+          attempts: job.attempts,
+        })),
+        ...pendingJobs.slice(0, 5).map((job: {
+          id: string;
+          payload: { title?: string; submissionId?: string };
+          createdAt: string;
+          attempts: number;
+        }) => ({
+          id: job.id,
+          status: 'pending' as const,
+          title: job.payload.title || 'Untitled',
+          submissionId: job.payload.submissionId || '',
+          createdAt: job.createdAt,
+          startedAt: null,
+          attempts: job.attempts,
+        })),
+      ];
+      setActiveJobs(active);
+
+    } catch {
+      // Silently fail - the full refresh will catch errors
+    }
+  }, [context.pluginId]);
+
+  // Silent data refresh without showing loading spinner (for after actions)
+  const refreshDataSilent = useCallback(async () => {
+    try {
+      const [submissionsRes] = await Promise.all([
+        fetch(`/api/plugins/${context.pluginId}/submissions?limit=100`),
+      ]);
+
+      const submissionsData = submissionsRes.ok
+        ? await submissionsRes.json()
+        : { submissions: [], stats: { total: 0, reviewed: 0, pending: 0, unreviewed: 0 } };
+
+      // Update submissions
+      if (submissionsData.submissions) {
+        const unreviewed = submissionsData.submissions.filter(
+          (s: SubmissionWithReview) => s.aiReview.status === 'unreviewed'
+        );
+        setUnreviewedSubmissions(unreviewed.slice(0, 10));
+
+        // Get reviewed submissions for re-review capability
+        const reviewed = submissionsData.submissions.filter(
+          (s: SubmissionWithReview) => s.aiReview.status === 'reviewed'
+        );
+        setReviewedSubmissions(reviewed.slice(0, 20)); // Show first 20
+
+        setSubmissionStats(submissionsData.stats);
+      }
+
+      // Also refresh job stats
+      await fetchActiveJobs();
+    } catch {
+      // Silently fail
+    }
+  }, [context.pluginId, fetchActiveJobs]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -209,14 +422,14 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       ];
       setActiveJobs(active);
 
-      // Calculate review stats
+      // Calculate review stats using helper function
       const totalReviews = completedJobs.length + failedJobs.length;
       const successRate = totalReviews > 0 ? (completedJobs.length / totalReviews) * 100 : 0;
 
       let totalScore = 0;
       let scoreCount = 0;
-      completedJobs.forEach((job: { result?: { data?: { analysis?: { overallScore?: number } } } }) => {
-        const score = job.result?.data?.analysis?.overallScore;
+      completedJobs.forEach((job: { result?: JobResultData }) => {
+        const { score } = getAnalysisFromJobResult(job.result || null);
         if (typeof score === 'number') {
           totalScore += score;
           scoreCount++;
@@ -230,32 +443,44 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         averageScore,
       });
 
-      // Get recent reviews (last 5 completed)
+      // Get recent reviews (last 5 completed) with proper result parsing
       const recent = completedJobs
         .slice(0, 5)
         .map((job: {
           id: string;
-          payload: { title?: string };
+          payload: { title?: string; submissionId?: string; eventSlug?: string };
           status: string;
           completedAt: string | null;
-          result?: { data?: { analysis?: { overallScore?: number; recommendation?: string } } };
-        }) => ({
-          id: job.id,
-          title: job.payload.title || 'Untitled',
-          score: job.result?.data?.analysis?.overallScore ?? null,
-          recommendation: job.result?.data?.analysis?.recommendation ?? null,
-          status: job.status,
-          completedAt: job.completedAt,
-        }));
+          result?: JobResultData;
+        }) => {
+          const analysis = getAnalysisFromJobResult(job.result || null);
+          return {
+            id: job.id,
+            title: job.payload.title || 'Untitled',
+            submissionId: analysis.submissionId || job.payload.submissionId || null,
+            eventSlug: analysis.eventSlug || job.payload.eventSlug || null,
+            score: analysis.score,
+            recommendation: analysis.recommendation,
+            status: job.status,
+            completedAt: job.completedAt,
+          };
+        });
 
       setRecentReviews(recent);
 
       // Set submission data
       if (submissionsData.submissions) {
         const unreviewed = submissionsData.submissions.filter(
-          (s: UnreviewedSubmission) => s.aiReview.status === 'unreviewed'
+          (s: SubmissionWithReview) => s.aiReview.status === 'unreviewed'
         );
         setUnreviewedSubmissions(unreviewed.slice(0, 10)); // Show first 10
+
+        // Get reviewed submissions for re-review capability
+        const reviewed = submissionsData.submissions.filter(
+          (s: SubmissionWithReview) => s.aiReview.status === 'reviewed'
+        );
+        setReviewedSubmissions(reviewed.slice(0, 20)); // Show first 20
+
         setSubmissionStats(submissionsData.stats);
       }
     } catch (err) {
@@ -269,15 +494,15 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     fetchData();
   }, [fetchData]);
 
-  // Auto-refresh when there are running jobs (every 5 seconds)
+  // Auto-refresh active jobs section only (every 5 seconds)
   useEffect(() => {
     if (jobStats.running > 0 || jobStats.pending > 0) {
       const interval = setInterval(() => {
-        fetchData();
+        fetchActiveJobs();
       }, 5000);
       return () => clearInterval(interval);
     }
-  }, [jobStats.running, jobStats.pending, fetchData]);
+  }, [jobStats.running, jobStats.pending, fetchActiveJobs]);
 
   const queueReview = async (submission: UnreviewedSubmission) => {
     setQueueingIds((prev) => new Set(prev).add(submission.id));
@@ -302,8 +527,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         throw new Error(data.error || 'Failed to queue review');
       }
 
-      // Refresh data to show updated status
-      await fetchData();
+      // Refresh data silently to show updated status without full page spinner
+      await refreshDataSilent();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to queue review');
     } finally {
@@ -342,12 +567,166 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         });
       }
 
-      // Refresh data
-      await fetchData();
+      // Refresh data silently without full page spinner
+      await refreshDataSilent();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to queue reviews');
     } finally {
       setQueueingAll(false);
+    }
+  };
+
+  // Re-review a single submission (even if already reviewed)
+  const queueReReview = async (submission: SubmissionWithReview) => {
+    setQueueingIds((prev) => new Set(prev).add(submission.id));
+
+    try {
+      const response = await fetch(`/api/plugins/${context.pluginId}/jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'ai-review',
+          payload: {
+            submissionId: submission.id,
+            eventId: submission.eventId,
+            title: submission.title,
+            abstract: submission.abstract,
+            isReReview: true, // Flag to indicate this is a re-review
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to queue re-review');
+      }
+
+      // Remove from selection if it was selected
+      setSelectedForReReview((prev) => {
+        const next = new Set(prev);
+        next.delete(submission.id);
+        return next;
+      });
+
+      // Refresh data silently
+      await refreshDataSilent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to queue re-review');
+    } finally {
+      setQueueingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(submission.id);
+        return next;
+      });
+    }
+  };
+
+  // Re-review selected submissions
+  const queueSelectedReReviews = async () => {
+    if (selectedForReReview.size === 0) return;
+    if (apiKeyStatusKnown && !hasApiKey) {
+      setError('Please configure your API key before queuing reviews');
+      return;
+    }
+
+    setReReviewingAll(true);
+    setError(null);
+
+    try {
+      const selectedSubmissions = reviewedSubmissions.filter((s) =>
+        selectedForReReview.has(s.id)
+      );
+
+      for (const submission of selectedSubmissions) {
+        await fetch(`/api/plugins/${context.pluginId}/jobs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'ai-review',
+            payload: {
+              submissionId: submission.id,
+              eventId: submission.eventId,
+              title: submission.title,
+              abstract: submission.abstract,
+              isReReview: true,
+            },
+          }),
+        });
+      }
+
+      // Clear selection after queueing
+      setSelectedForReReview(new Set());
+
+      // Refresh data silently
+      await refreshDataSilent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to queue re-reviews');
+    } finally {
+      setReReviewingAll(false);
+    }
+  };
+
+  // Re-review ALL reviewed submissions
+  const queueAllReReviews = async () => {
+    if (apiKeyStatusKnown && !hasApiKey) {
+      setError('Please configure your API key before queuing reviews');
+      return;
+    }
+
+    setReReviewingAll(true);
+    setError(null);
+
+    try {
+      for (const submission of reviewedSubmissions) {
+        await fetch(`/api/plugins/${context.pluginId}/jobs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'ai-review',
+            payload: {
+              submissionId: submission.id,
+              eventId: submission.eventId,
+              title: submission.title,
+              abstract: submission.abstract,
+              isReReview: true,
+            },
+          }),
+        });
+      }
+
+      // Clear selection
+      setSelectedForReReview(new Set());
+
+      // Refresh data silently
+      await refreshDataSilent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to queue re-reviews');
+    } finally {
+      setReReviewingAll(false);
+    }
+  };
+
+  // Toggle selection for re-review
+  const toggleSelectForReReview = (id: string) => {
+    setSelectedForReReview((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Select all reviewed submissions
+  const selectAllReviewed = () => {
+    if (selectedForReReview.size === reviewedSubmissions.length) {
+      // If all selected, deselect all
+      setSelectedForReReview(new Set());
+    } else {
+      // Select all
+      setSelectedForReReview(new Set(reviewedSubmissions.map((s) => s.id)));
     }
   };
 
@@ -576,7 +955,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                   Personas
                 </a>
                 <a
-                  href={`/admin/plugins/${context.pluginName || 'ai-paper-reviewer'}`}
+                  href={`/admin/plugins/${context.pluginId}`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
                   <Settings className="h-4 w-4" />
@@ -716,6 +1095,135 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
             </div>
           )}
 
+          {/* Reviewed Submissions - Re-review Section */}
+          {reviewedSubmissions.length > 0 && (
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="re-review-section">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setShowReviewedSection(!showReviewedSection)}
+                    className="flex items-center gap-2 text-left"
+                  >
+                    <RotateCcw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      Re-review Submissions ({submissionStats.reviewed} reviewed)
+                    </h3>
+                    <span className="text-xs text-slate-400">
+                      {showReviewedSection ? '▲' : '▼'}
+                    </span>
+                  </button>
+                  {showReviewedSection && (hasApiKey || !apiKeyStatusKnown) && (
+                    <div className="flex items-center gap-2">
+                      {selectedForReReview.size > 0 && (
+                        <button
+                          onClick={queueSelectedReReviews}
+                          disabled={reReviewingAll}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 transition-colors"
+                        >
+                          {reReviewingAll ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-4 w-4" />
+                          )}
+                          Re-review Selected ({selectedForReReview.size})
+                        </button>
+                      )}
+                      <button
+                        onClick={queueAllReReviews}
+                        disabled={reReviewingAll}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 disabled:opacity-50 transition-colors"
+                      >
+                        {reReviewingAll ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-4 w-4" />
+                        )}
+                        Re-review All
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {showReviewedSection && (
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Select submissions to re-run AI analysis with updated criteria or personas.
+                  </p>
+                )}
+              </div>
+              {showReviewedSection && (
+                <>
+                  <div className="p-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                    <button
+                      onClick={selectAllReviewed}
+                      className="flex items-center gap-2 px-2 py-1 text-xs text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                    >
+                      {selectedForReReview.size === reviewedSubmissions.length ? (
+                        <CheckSquare className="h-4 w-4 text-blue-600" />
+                      ) : (
+                        <Square className="h-4 w-4" />
+                      )}
+                      {selectedForReReview.size === reviewedSubmissions.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+                  <div className="divide-y divide-slate-200 dark:divide-slate-700 max-h-96 overflow-y-auto">
+                    {reviewedSubmissions.map((submission) => (
+                      <div
+                        key={submission.id}
+                        className={`p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 ${
+                          selectedForReReview.has(submission.id) ? 'bg-blue-50 dark:bg-blue-950/20' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <button
+                            onClick={() => toggleSelectForReReview(submission.id)}
+                            className="flex-shrink-0"
+                          >
+                            {selectedForReReview.has(submission.id) ? (
+                              <CheckSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                            ) : (
+                              <Square className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+                            )}
+                          </button>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                              {submission.title}
+                            </p>
+                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                              <span>{submission.event.name}</span>
+                              <span>•</span>
+                              <span
+                                className={`font-medium ${getRecommendationColor(submission.aiReview.recommendation || null)}`}
+                              >
+                                {submission.aiReview.score !== null ? `${submission.aiReview.score}/5` : '-'}
+                                {submission.aiReview.recommendation && ` - ${submission.aiReview.recommendation.replace(/_/g, ' ')}`}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => queueReReview(submission)}
+                          disabled={(apiKeyStatusKnown && !hasApiKey) || queueingIds.has(submission.id)}
+                          className="ml-4 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 disabled:opacity-50 transition-colors"
+                        >
+                          {queueingIds.has(submission.id) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-4 w-4" />
+                          )}
+                          Re-review
+                        </button>
+                      </div>
+                    ))}
+                    {submissionStats.reviewed > 20 && (
+                      <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                        Showing first 20 of {submissionStats.reviewed} reviewed submissions
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Recent Activity */}
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="recent-activity">
             <div className="p-4 border-b border-slate-200 dark:border-slate-700">
@@ -747,15 +1255,34 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                           : 'Pending'}
                       </p>
                     </div>
-                    <div className="flex items-center gap-4 ml-4">
-                      <span className="text-sm font-medium text-slate-900 dark:text-white">
-                        {review.score !== null ? `${review.score}/5` : '-'}
-                      </span>
-                      <span
-                        className={`text-xs font-medium ${getRecommendationColor(review.recommendation)}`}
-                      >
-                        {review.recommendation?.replace(/_/g, ' ') || '-'}
-                      </span>
+                    <div className="flex items-center gap-3 ml-4">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-semibold ${
+                          review.score !== null && review.score >= 4 ? 'text-green-600 dark:text-green-400' :
+                          review.score !== null && review.score >= 3 ? 'text-amber-600 dark:text-amber-400' :
+                          review.score !== null ? 'text-red-600 dark:text-red-400' : 'text-slate-400'
+                        }`}>
+                          {review.score !== null ? `${review.score}/5` : '-'}
+                        </span>
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            review.recommendation?.includes('ACCEPT') ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                            review.recommendation?.includes('REJECT') ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                            'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          {review.recommendation?.replace(/_/g, ' ') || '-'}
+                        </span>
+                      </div>
+                      {review.submissionId && review.eventSlug && (
+                        <a
+                          href={`/admin/events/${review.eventSlug}/submissions/${review.submissionId}`}
+                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-200 dark:border-purple-700 rounded hover:bg-purple-50 dark:hover:bg-purple-950/50 transition-colors"
+                        >
+                          <FileText className="h-3 w-3" />
+                          View
+                        </a>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -7,7 +7,7 @@
  * Shows date, submission, score, recommendation, confidence, and status.
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   History,
   RefreshCw,
@@ -18,28 +18,114 @@ import {
   XCircle,
   TrendingUp,
   FileText,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
 import type { PluginComponentProps } from '@/lib/plugins';
 
 type FilterStatus = 'all' | 'completed' | 'failed';
 
+interface AnalysisData {
+  overallScore: number;
+  recommendation: string;
+  confidence: number;
+  summary?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+}
+
 interface JobResult {
-  success: boolean;
+  // New format: { success: true, data: { analysis, ... } }
+  success?: boolean;
   data?: {
-    submissionId: string;
-    analysis: {
-      overallScore: number;
-      recommendation: string;
-      confidence: number;
-      summary?: string;
-      strengths?: string[];
-      weaknesses?: string[];
-    };
-    analyzedAt: string;
-    provider: string;
-    model: string;
+    submissionId?: string;
+    analysis?: AnalysisData;
+    analyzedAt?: string;
+    provider?: string;
+    model?: string;
+    // Direct fields in data (some formats)
+    overallScore?: number;
+    recommendation?: string;
+    confidence?: number;
+    summary?: string;
+    strengths?: string[];
+    weaknesses?: string[];
   };
+  // Old format: { submissionId, analysis, ... } stored directly
+  submissionId?: string;
+  analysis?: AnalysisData;
+  analyzedAt?: string;
+  provider?: string;
+  model?: string;
   error?: string;
+  // Very old format - direct on result
+  overallScore?: number;
+  recommendation?: string;
+  confidence?: number;
+  summary?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+}
+
+/**
+ * Helper to extract analysis from job result (handles multiple formats)
+ * Supports:
+ * - New format: { success, data: { analysis: { overallScore } } }
+ * - Data direct: { success, data: { overallScore } }
+ * - Old format: { analysis: { overallScore } }
+ * - Direct: { overallScore }
+ */
+function getAnalysisFromResult(result: JobResult | null): AnalysisData | null {
+  if (!result) return null;
+
+  // New format: result.data.analysis
+  if (result.data?.analysis?.overallScore !== undefined) {
+    return result.data.analysis;
+  }
+
+  // Data direct format: result.data has direct fields
+  if (result.data?.overallScore !== undefined) {
+    return {
+      overallScore: result.data.overallScore,
+      recommendation: result.data.recommendation || 'NEUTRAL',
+      confidence: result.data.confidence ?? 0.8,
+      summary: result.data.summary,
+      strengths: result.data.strengths,
+      weaknesses: result.data.weaknesses,
+    };
+  }
+
+  // Old format: result.analysis
+  if (result.analysis?.overallScore !== undefined) {
+    return result.analysis;
+  }
+
+  // Very old format: direct on result
+  if (result.overallScore !== undefined) {
+    return {
+      overallScore: result.overallScore,
+      recommendation: result.recommendation || 'NEUTRAL',
+      confidence: result.confidence ?? 0.8,
+      summary: result.summary,
+      strengths: result.strengths,
+      weaknesses: result.weaknesses,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Helper to get provider/model from job result
+ */
+function getProviderFromResult(result: JobResult | null): { provider?: string; model?: string } {
+  if (!result) return {};
+  // New format
+  if (result.data?.provider) {
+    return { provider: result.data.provider, model: result.data.model };
+  }
+  // Old format
+  return { provider: result.provider, model: result.model };
 }
 
 interface Job {
@@ -97,8 +183,11 @@ function RecommendationBadge({ recommendation }: { recommendation: string }) {
 function ExpandableRow({ job }: { job: Job }) {
   const [expanded, setExpanded] = useState(false);
   const result = job.result;
-  const analysis = result?.data?.analysis;
+  // Use helper to get analysis from both old and new formats
+  const analysis = getAnalysisFromResult(result);
+  const providerInfo = getProviderFromResult(result);
   const payload = job.payload as { title?: string; submissionId?: string };
+  const hasValidAnalysis = analysis !== null;
 
   return (
     <>
@@ -162,7 +251,7 @@ function ExpandableRow({ job }: { job: Job }) {
       {expanded && (
         <tr className="bg-slate-50 dark:bg-slate-800/30" data-testid={`job-details-${job.id}`}>
           <td colSpan={7} className="px-6 py-4">
-            {result?.success && analysis ? (
+            {hasValidAnalysis && analysis ? (
               <div className="space-y-4 text-sm">
                 {analysis.summary && (
                   <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -193,7 +282,7 @@ function ExpandableRow({ job }: { job: Job }) {
                   )}
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-500 pt-2 border-t border-slate-200 dark:border-slate-700">
-                  Provider: {result.data?.provider}/{result.data?.model} | Job ID: {job.id}
+                  Provider: {providerInfo.provider || 'unknown'}/{providerInfo.model || 'unknown'} | Job ID: {job.id}
                 </div>
               </div>
             ) : (
@@ -214,8 +303,10 @@ export function AdminReviewHistory({ context }: PluginComponentProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('all');
+  const [clearing, setClearing] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -246,23 +337,50 @@ export function AdminReviewHistory({ context }: PluginComponentProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [context.pluginId]);
 
   useEffect(() => {
     fetchJobs();
-  }, [context.pluginId]); // fetchJobs is stable
+  }, [fetchJobs]);
+
+  const clearHistory = useCallback(async () => {
+    setClearing(true);
+    setError(null);
+    try {
+      // Delete all completed and failed jobs for this plugin
+      const response = await fetch(`/api/plugins/${context.pluginId}/jobs/clear`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statuses: ['completed', 'failed'], type: 'ai-review' }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to clear history');
+      }
+
+      const data = await response.json();
+      setJobs([]);
+      setShowClearConfirm(false);
+      console.log(`Cleared ${data.deletedCount} review jobs`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear history');
+    } finally {
+      setClearing(false);
+    }
+  }, [context.pluginId]);
 
   const filteredJobs = useMemo(() => {
     if (filter === 'all') return jobs;
     return jobs.filter((j) => j.status === filter);
   }, [jobs, filter]);
 
-  // Calculate summary stats
+  // Calculate summary stats (uses helper function to handle both old and new formats)
   const stats = useMemo(() => {
     const completed = jobs.filter((j) => j.status === 'completed');
     const failed = jobs.filter((j) => j.status === 'failed');
     const totalScores = completed
-      .map((j) => j.result?.data?.analysis?.overallScore)
+      .map((j) => getAnalysisFromResult(j.result)?.overallScore)
       .filter((s): s is number => typeof s === 'number');
     const avgScore = totalScores.length > 0
       ? totalScores.reduce((a, b) => a + b, 0) / totalScores.length
@@ -280,21 +398,73 @@ export function AdminReviewHistory({ context }: PluginComponentProps) {
 
   return (
     <div className="space-y-6" data-testid="admin-review-history">
+      {/* Clear Confirmation Dialog */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 max-w-md mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+              Clear Review History?
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+              This will permanently delete all {stats.total} review records (completed and failed).
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                disabled={clearing}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={clearHistory}
+                disabled={clearing}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 flex items-center gap-2"
+              >
+                {clearing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Clearing...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    Clear All
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <History className="h-6 w-6 text-purple-600 dark:text-purple-400" />
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Review History</h1>
         </div>
-        <button
-          onClick={fetchJobs}
-          disabled={loading}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
-          data-testid="refresh-button"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            disabled={loading || jobs.length === 0}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 disabled:opacity-50 transition-colors"
+            data-testid="clear-history-button"
+          >
+            <Trash2 className="h-4 w-4" />
+            Clear History
+          </button>
+          <button
+            onClick={fetchJobs}
+            disabled={loading}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+            data-testid="refresh-button"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Summary Stats Card */}
@@ -408,6 +578,20 @@ export function AdminReviewHistory({ context }: PluginComponentProps) {
           </table>
         )}
       </div>
+
+      {/* Bottom Clear History Button */}
+      {jobs.length > 0 && (
+        <div className="flex justify-center pt-4 pb-2">
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            disabled={loading || clearing}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 disabled:opacity-50 transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
+            Clear All History ({jobs.length} records)
+          </button>
+        </div>
+      )}
     </div>
   );
 }

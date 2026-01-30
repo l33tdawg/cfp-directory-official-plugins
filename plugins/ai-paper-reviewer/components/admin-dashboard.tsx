@@ -1182,6 +1182,26 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                       {isExpanded && analysis && (
                         <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700">
                           <div className="space-y-4 text-sm">
+                            {/* Criteria Scores - Table style at top */}
+                            {analysis.criteriaScores && Object.keys(analysis.criteriaScores).length > 0 && (
+                              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 divide-x divide-y divide-slate-200 dark:divide-slate-700">
+                                  {Object.entries(analysis.criteriaScores).map(([criteria, score]) => (
+                                    <div key={criteria} className="px-3 py-2 flex items-center justify-between gap-2">
+                                      <span className="text-xs text-slate-600 dark:text-slate-400">{criteria}</span>
+                                      <span className={`text-sm font-semibold ${
+                                        score >= 4 ? 'text-green-600 dark:text-green-400' :
+                                        score >= 3 ? 'text-amber-600 dark:text-amber-400' :
+                                        'text-red-600 dark:text-red-400'
+                                      }`}>
+                                        {score}/5
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
                             {/* Summary */}
                             {analysis.summary && (
                               <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -1226,27 +1246,6 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                                     <li key={i} className="text-slate-600 dark:text-slate-400">{s}</li>
                                   ))}
                                 </ul>
-                              </div>
-                            )}
-
-                            {/* Criteria Scores if available */}
-                            {analysis.criteriaScores && Object.keys(analysis.criteriaScores).length > 0 && (
-                              <div className="bg-purple-50 dark:bg-purple-950/30 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
-                                <span className="font-semibold text-purple-700 dark:text-purple-300 block mb-2">Criteria Scores</span>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                  {Object.entries(analysis.criteriaScores).map(([criteria, score]) => (
-                                    <div key={criteria} className="flex justify-between items-center bg-white dark:bg-slate-900 px-2 py-1 rounded">
-                                      <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{criteria}</span>
-                                      <span className={`text-xs font-semibold ml-2 ${
-                                        score >= 4 ? 'text-green-600 dark:text-green-400' :
-                                        score >= 3 ? 'text-amber-600 dark:text-amber-400' :
-                                        'text-red-600 dark:text-red-400'
-                                      }`}>
-                                        {score}/5
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
                               </div>
                             )}
 

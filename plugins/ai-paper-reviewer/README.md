@@ -131,7 +131,13 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.7.0 (Current)
+### v1.7.1 (Current)
+- Dashboard "Jobs in Progress" section shows pending/running jobs
+- Auto-refresh when jobs are active (every 5 seconds)
+- Fix: Model fetching now uses form's current API key (not just saved config)
+- Requires cfp-directory-self-hosted v1.14.0+
+
+### v1.7.0
 - Dynamic model fetching - validates API keys and shows real model list from provider
 - API key validation at configuration time
 - Dashboard shows proper API key configuration status

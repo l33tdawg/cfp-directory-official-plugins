@@ -489,9 +489,40 @@ export async function handleAiReviewJob(
 ): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
   const config = ctx.config as AiReviewerConfig;
   const submissionId = payload.submissionId as string;
-  const eventId = payload.eventId as string | undefined;
+  let eventId = payload.eventId as string | undefined;
 
-  ctx.logger.info('Processing AI review job', { submissionId });
+  ctx.logger.info('Processing AI review job', { submissionId, isReReview: payload.isReReview });
+
+  // For re-reviews or when abstract is missing, fetch full submission data
+  let submissionData = {
+    title: payload.title as string,
+    abstract: payload.abstract as string | null,
+    outline: payload.outline as string | null,
+    targetAudience: payload.targetAudience as string | null,
+    prerequisites: payload.prerequisites as string | null,
+  };
+
+  if (!submissionData.abstract || payload.isReReview) {
+    try {
+      const submission = await ctx.submissions.get(submissionId);
+      if (submission) {
+        submissionData = {
+          title: submission.title,
+          abstract: submission.abstract,
+          outline: (submission as Record<string, unknown>).outline as string | null,
+          targetAudience: (submission as Record<string, unknown>).targetAudience as string | null,
+          prerequisites: (submission as Record<string, unknown>).prerequisites as string | null,
+        };
+        // Also get eventId from submission if not provided
+        if (!eventId) {
+          eventId = submission.eventId;
+        }
+        ctx.logger.info('Fetched submission data for review', { submissionId, hasAbstract: !!submission.abstract });
+      }
+    } catch (err) {
+      ctx.logger.warn('Failed to fetch submission, using payload data', { submissionId });
+    }
+  }
 
   // Update API key configuration status (for dashboard display)
   const hasApiKey = Boolean(config.apiKey);
@@ -537,8 +568,8 @@ export async function handleAiReviewJob(
         const allSubmissions = await ctx.submissions.list({ eventId });
         const others = allSubmissions.filter((s) => s.id !== submissionId);
         similarSubmissions = findSimilarSubmissions(
-          payload.title as string,
-          (payload.abstract as string) || null,
+          submissionData.title,
+          submissionData.abstract,
           others.map((s) => ({ id: s.id, title: s.title, abstract: s.abstract })),
           config.duplicateThreshold ?? 0.7
         );
@@ -562,13 +593,13 @@ export async function handleAiReviewJob(
       reviewFocus: config.reviewFocus,
     });
 
-    // 4. Build submission text
+    // 4. Build submission text (using fetched data for re-reviews)
     const submissionText = buildSubmissionText({
-      title: payload.title as string,
-      abstract: (payload.abstract as string) || null,
-      outline: (payload.outline as string) || null,
-      targetAudience: (payload.targetAudience as string) || null,
-      prerequisites: (payload.prerequisites as string) || null,
+      title: submissionData.title,
+      abstract: submissionData.abstract,
+      outline: submissionData.outline,
+      targetAudience: submissionData.targetAudience,
+      prerequisites: submissionData.prerequisites,
     });
 
     // 5. Call AI with temperature and parse with retry
@@ -594,11 +625,18 @@ export async function handleAiReviewJob(
     try {
       // Get the service account ID
       const serviceAccountId = await ctx.data.get<string>('config', 'service-account-id');
+      ctx.logger.info('Service account lookup', { serviceAccountId, submissionId });
 
       if (serviceAccountId) {
         // Check if there's an existing review from this service account for this submission
         const existingReviews = await ctx.reviews.list({ submissionId, reviewerId: serviceAccountId });
         const existingReview = existingReviews.length > 0 ? existingReviews[0] : null;
+        ctx.logger.info('Existing review check', {
+          foundReviews: existingReviews.length,
+          existingReviewId: existingReview?.id || null,
+          submissionId,
+          reviewerId: serviceAccountId
+        });
 
         // Map AI recommendation to ReviewRecommendation enum
         const recommendationMap: Record<string, 'STRONG_ACCEPT' | 'ACCEPT' | 'NEUTRAL' | 'REJECT' | 'STRONG_REJECT'> = {

@@ -20,6 +20,8 @@ import { callProvider } from './lib/providers';
 import { parseWithRetry } from './lib/json-repair';
 import { findSimilarSubmissions } from './lib/similarity';
 import type { SimilarSubmission } from './lib/similarity';
+import { fetchModelsForProvider } from './lib/model-fetcher';
+import type { FetchModelsResult } from './lib/model-fetcher';
 import manifestJson from './manifest.json';
 
 const manifest: PluginManifest = manifestJson as PluginManifest;
@@ -234,7 +236,11 @@ const plugin: Plugin = {
       });
     }
 
-    if (!config.apiKey) {
+    // Store API key configuration status (password fields are redacted on client)
+    const hasApiKey = Boolean(config.apiKey);
+    await ctx.data.set('config', 'api-key-configured', hasApiKey);
+
+    if (!hasApiKey) {
       ctx.logger.warn('AI Paper Reviewer enabled without an API key - reviews will fail until configured');
     } else {
       ctx.logger.info('AI Paper Reviewer enabled', {
@@ -253,6 +259,10 @@ const plugin: Plugin = {
     'submission.created': async (ctx, payload) => {
       const config = ctx.config as AiReviewerConfig;
 
+      // Update API key configuration status (for dashboard display)
+      const hasApiKey = Boolean(config.apiKey);
+      await ctx.data.set('config', 'api-key-configured', hasApiKey);
+
       if (config.autoReview === false) {
         ctx.logger.debug('Auto-review disabled, skipping AI analysis', {
           submissionId: payload.submission.id,
@@ -260,7 +270,7 @@ const plugin: Plugin = {
         return;
       }
 
-      if (!config.apiKey) {
+      if (!hasApiKey) {
         ctx.logger.warn('Cannot run AI review - no API key configured');
         return;
       }
@@ -287,13 +297,17 @@ const plugin: Plugin = {
     'submission.updated': async (ctx, payload) => {
       const config = ctx.config as AiReviewerConfig;
 
+      // Update API key configuration status (for dashboard display)
+      const hasApiKey = Boolean(config.apiKey);
+      await ctx.data.set('config', 'api-key-configured', hasApiKey);
+
       const hasContentChanges =
         payload.changes.abstract !== undefined ||
         payload.changes.title !== undefined ||
         payload.changes.outline !== undefined;
 
       if (!hasContentChanges) return;
-      if (config.autoReview === false || !config.apiKey) return;
+      if (config.autoReview === false || !hasApiKey) return;
 
       const submissionId = payload.submission.id;
 
@@ -387,6 +401,45 @@ const plugin: Plugin = {
       component: AdminPersonas,
     },
   ],
+
+  actions: {
+    'list-models': async (
+      ctx: PluginContext,
+      params: { provider?: string }
+    ): Promise<FetchModelsResult> => {
+      const config = ctx.config as AiReviewerConfig;
+      const provider = params.provider || config.aiProvider || 'openai';
+      const apiKey = config.apiKey;
+
+      if (!apiKey) {
+        return {
+          success: false,
+          error: {
+            code: 'NO_API_KEY',
+            message: 'Please enter your API key first',
+          },
+        };
+      }
+
+      ctx.logger.info('Fetching models for provider', { provider });
+
+      const result = await fetchModelsForProvider(provider, apiKey);
+
+      if (result.success) {
+        ctx.logger.info('Successfully fetched models', {
+          provider,
+          modelCount: result.models?.length || 0,
+        });
+      } else {
+        ctx.logger.warn('Failed to fetch models', {
+          provider,
+          error: result.error?.message,
+        });
+      }
+
+      return result;
+    },
+  },
 };
 
 export default plugin;
@@ -404,6 +457,16 @@ export async function handleAiReviewJob(
   const eventId = payload.eventId as string | undefined;
 
   ctx.logger.info('Processing AI review job', { submissionId });
+
+  // Update API key configuration status (for dashboard display)
+  const hasApiKey = Boolean(config.apiKey);
+  await ctx.data.set('config', 'api-key-configured', hasApiKey);
+
+  // Check for API key early and return a clear error
+  if (!hasApiKey) {
+    ctx.logger.error('AI review failed - no API key configured', { submissionId });
+    return { success: false, error: 'API key not configured. Please add your API key in the plugin settings.' };
+  }
 
   try {
     // 1. Fetch event criteria if useEventCriteria is enabled

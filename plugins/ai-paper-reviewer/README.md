@@ -136,6 +136,7 @@ ai-paper-reviewer/
 - Core review integration - AI reviews stored in main reviews table
 - Reviews appear in standard submissions list with scores
 - Added "Show on Team Page" visibility option
+- Dynamic model fetching - validates API keys and shows real model list from provider
 - Requires cfp-directory-self-hosted v1.13.0+
 
 ### v1.5.0

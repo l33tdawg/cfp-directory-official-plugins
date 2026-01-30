@@ -17,6 +17,13 @@
     "submission.created",
     "submission.updated"
   ],
+  "actions": [
+    {
+      "name": "list-models",
+      "title": "List Available Models",
+      "description": "Fetches available models from the configured AI provider"
+    }
+  ],
   "sidebarItems": [
     {
       "title": "AI Reviews",
@@ -77,8 +84,16 @@
         "description": "The AI model to use for reviews",
         "default": "gpt-4o",
         "x-group": "provider",
-        "x-depends-on": "aiProvider",
-        "x-friendly-hint": "Each provider offers models that balance quality, speed, and cost. The recommended option works well for most teams.",
+        "x-depends-on": ["aiProvider", "apiKey"],
+        "x-friendly-hint": "Models are fetched from your provider using your API key. If the list is empty or shows an error, check that your API key is valid.",
+        "x-options-api": {
+          "action": "list-models",
+          "params": { "provider": "${aiProvider}" },
+          "dependsOnFields": ["aiProvider", "apiKey"],
+          "cacheSeconds": 300,
+          "loadingText": "Loading models from provider...",
+          "errorBehavior": "show-error-with-fallback"
+        },
         "x-options": {
           "openai": [
             { "value": "gpt-4o", "label": "GPT-4o (Recommended)", "description": "Best balance of quality and speed" },

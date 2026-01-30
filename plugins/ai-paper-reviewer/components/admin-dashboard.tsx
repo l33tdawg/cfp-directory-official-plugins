@@ -74,7 +74,8 @@ interface SubmissionStats {
   unreviewed: number;
 }
 
-export function AdminDashboard({ context }: PluginComponentProps) {
+export function AdminDashboard({ context, data }: PluginComponentProps) {
+  const pluginBasePath = (data?.pluginBasePath as string) || '/admin/plugins/pages';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [jobStats, setJobStats] = useState<JobStats>({
@@ -98,8 +99,13 @@ export function AdminDashboard({ context }: PluginComponentProps) {
   });
   const [queueingAll, setQueueingAll] = useState(false);
   const [queueingIds, setQueueingIds] = useState<Set<string>>(new Set());
+  const [apiKeyConfigured, setApiKeyConfigured] = useState<boolean | null>(null);
 
-  const hasApiKey = Boolean(context.config.apiKey);
+  // Password fields are redacted on client, so check via plugin data
+  // Fall back to checking config.apiKey in case it's not redacted
+  // Allow actions when status is unknown (null) - server will validate
+  const hasApiKey = apiKeyConfigured === true || Boolean(context.config.apiKey);
+  const apiKeyStatusKnown = apiKeyConfigured !== null || Boolean(context.config.apiKey);
   const provider = (context.config.aiProvider as string) || 'openai';
   const model = (context.config.model as string) || 'gpt-4o';
 
@@ -108,14 +114,21 @@ export function AdminDashboard({ context }: PluginComponentProps) {
     setError(null);
 
     try {
-      // Fetch all job types and submissions in parallel
-      const [pendingRes, runningRes, completedRes, failedRes, submissionsRes] = await Promise.all([
+      // Fetch all job types, submissions, and config status in parallel
+      const [pendingRes, runningRes, completedRes, failedRes, submissionsRes, configRes] = await Promise.all([
         fetch(`/api/plugins/${context.pluginId}/jobs?status=pending&type=ai-review&limit=100`),
         fetch(`/api/plugins/${context.pluginId}/jobs?status=running&type=ai-review&limit=100`),
         fetch(`/api/plugins/${context.pluginId}/jobs?status=completed&type=ai-review&limit=100`),
         fetch(`/api/plugins/${context.pluginId}/jobs?status=failed&type=ai-review&limit=100`),
         fetch(`/api/plugins/${context.pluginId}/submissions?limit=100`),
+        fetch(`/api/plugins/${context.pluginId}/data/config/api-key-configured`),
       ]);
+
+      // Check API key configuration status
+      if (configRes.ok) {
+        const configData = await configRes.json();
+        setApiKeyConfigured(configData.value === true);
+      }
 
       const [pendingData, runningData, completedData, failedData, submissionsData] = await Promise.all([
         pendingRes.json(),
@@ -248,7 +261,7 @@ export function AdminDashboard({ context }: PluginComponentProps) {
   };
 
   const queueAllUnreviewed = async () => {
-    if (!hasApiKey) {
+    if (apiKeyStatusKnown && !hasApiKey) {
       setError('Please configure your API key before queuing reviews');
       return;
     }
@@ -331,7 +344,9 @@ export function AdminDashboard({ context }: PluginComponentProps) {
             className={`p-4 rounded-lg border ${
               hasApiKey
                 ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800'
-                : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+                : apiKeyStatusKnown
+                  ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+                  : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700'
             }`}
             data-testid="config-status"
           >
@@ -348,7 +363,7 @@ export function AdminDashboard({ context }: PluginComponentProps) {
                     </p>
                   </div>
                 </>
-              ) : (
+              ) : apiKeyStatusKnown ? (
                 <>
                   <Key className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                   <div>
@@ -357,6 +372,18 @@ export function AdminDashboard({ context }: PluginComponentProps) {
                     </p>
                     <p className="text-xs text-amber-600 dark:text-amber-400">
                       Configure your API key in the plugin settings to enable reviews
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Key className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+                  <div>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Using {provider} / {model}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Click Review on a submission to verify your API key configuration
                     </p>
                   </div>
                 </>
@@ -480,21 +507,21 @@ export function AdminDashboard({ context }: PluginComponentProps) {
               </div>
               <div className="flex flex-col gap-2">
                 <a
-                  href={`/admin/plugins/pages/ai-paper-reviewer/history`}
+                  href={`${pluginBasePath}/ai-paper-reviewer/history`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
                   <History className="h-4 w-4" />
                   History
                 </a>
                 <a
-                  href={`/admin/plugins/pages/ai-paper-reviewer/personas`}
+                  href={`${pluginBasePath}/ai-paper-reviewer/personas`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
                   <Sparkles className="h-4 w-4" />
                   Personas
                 </a>
                 <a
-                  href={`/admin/plugins/ai-paper-reviewer`}
+                  href={`/admin/plugins/${context.pluginName || 'ai-paper-reviewer'}`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
                   <Settings className="h-4 w-4" />
@@ -515,7 +542,7 @@ export function AdminDashboard({ context }: PluginComponentProps) {
                       Review Queue ({submissionStats.unreviewed} unreviewed)
                     </h3>
                   </div>
-                  {hasApiKey && unreviewedSubmissions.length > 0 && (
+                  {(hasApiKey || !apiKeyStatusKnown) && unreviewedSubmissions.length > 0 && (
                     <button
                       onClick={queueAllUnreviewed}
                       disabled={queueingAll}
@@ -547,7 +574,7 @@ export function AdminDashboard({ context }: PluginComponentProps) {
                     </div>
                     <button
                       onClick={() => queueReview(submission)}
-                      disabled={!hasApiKey || queueingIds.has(submission.id)}
+                      disabled={(apiKeyStatusKnown && !hasApiKey) || queueingIds.has(submission.id)}
                       className="ml-4 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-md hover:bg-purple-50 dark:hover:bg-purple-950/50 disabled:opacity-50 transition-colors"
                     >
                       {queueingIds.has(submission.id) ? (

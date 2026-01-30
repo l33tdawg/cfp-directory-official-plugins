@@ -116,8 +116,15 @@ describe('Manifest configSchema extensions', () => {
   describe('x-depends-on and x-options', () => {
     const modelProp = properties.model;
 
-    it('model has x-depends-on pointing to aiProvider', () => {
-      expect(modelProp['x-depends-on']).toBe('aiProvider');
+    it('model has x-depends-on pointing to aiProvider and apiKey', () => {
+      expect(modelProp['x-depends-on']).toEqual(['aiProvider', 'apiKey']);
+    });
+
+    it('model has x-options-api for dynamic model fetching', () => {
+      expect(modelProp['x-options-api']).toBeDefined();
+      expect(modelProp['x-options-api'].action).toBe('list-models');
+      expect(modelProp['x-options-api'].dependsOnFields).toContain('aiProvider');
+      expect(modelProp['x-options-api'].dependsOnFields).toContain('apiKey');
     });
 
     it('model has x-options with all three providers', () => {

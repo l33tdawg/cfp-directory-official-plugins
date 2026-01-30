@@ -637,8 +637,8 @@ export async function handleAiReviewJob(
 
         const privateNotes = privateNoteParts.join('\n');
 
-        // Public notes - provide constructive summary for speakers (only shown if rejected)
-        const publicNotes = result.summary || 'Thank you for your submission.';
+        // Public notes left empty - admins decide what feedback to share with speakers
+        const publicNotes = undefined;
 
         // Extract scores from criteriaScores if available
         const criteriaScores = result.criteriaScores || {};

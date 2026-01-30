@@ -704,17 +704,41 @@ export async function handleAiReviewJob(
             overallScore: result.overallScore,
           });
         } else {
-          // Create new review
-          review = await ctx.reviews.create({
-            submissionId,
-            reviewerId: serviceAccountId,
-            ...reviewData,
-          });
-          ctx.logger.info('Created review in core reviews table', {
-            reviewId: review.id,
-            submissionId,
-            overallScore: result.overallScore,
-          });
+          // Try to create new review, but handle unique constraint errors
+          try {
+            review = await ctx.reviews.create({
+              submissionId,
+              reviewerId: serviceAccountId,
+              ...reviewData,
+            });
+            ctx.logger.info('Created review in core reviews table', {
+              reviewId: review.id,
+              submissionId,
+              overallScore: result.overallScore,
+            });
+          } catch (createError) {
+            // If unique constraint error, find the review by submission and update it
+            if (createError instanceof Error && createError.message.includes('Unique constraint')) {
+              ctx.logger.info('Review already exists, finding and updating...', { submissionId });
+              const allReviews = await ctx.reviews.getBySubmission(submissionId);
+              const aiReview = allReviews.find(r =>
+                r.reviewerId === serviceAccountId ||
+                r.privateNotes?.startsWith('## AI Analysis Summary')
+              );
+              if (aiReview) {
+                review = await ctx.reviews.update(aiReview.id, reviewData);
+                ctx.logger.info('Updated review after unique constraint error', {
+                  reviewId: review.id,
+                  submissionId,
+                  overallScore: result.overallScore,
+                });
+              } else {
+                throw createError; // Re-throw if we can't find the review
+              }
+            } else {
+              throw createError;
+            }
+          }
         }
 
         reviewId = review.id;

@@ -1,260 +1,135 @@
 # AI Paper Reviewer Plugin
 
-> **Current App Version:** 1.0.0  
-> **Plugin Target Version:** 1.0.0  
-> **Requires:** Plugin System v1.4.0+  
-> **Status:** In Development  
-> **Repository:** `cfp-directory-plugins` (separate from main app)
+> **Current Version:** 1.13.0
+> **Plugin API Version:** 1.0
+> **Requires:** Plugin System v1.13.0+
+> **Status:** Production Ready
+> **Repository:** `cfp-directory-official-plugins`
 
-This document describes the AI Paper Reviewer plugin, which automatically analyzes CFP submissions using AI to provide preliminary review scores, research insights, and feedback based on the event's configured review criteria.
+This document describes the AI Paper Reviewer plugin, which automatically analyzes CFP submissions using AI to provide preliminary review scores, feedback, and recommendations based on the event's configured review criteria.
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [Plugin Distribution](#plugin-distribution)
 - [Features](#features)
+- [Installation](#installation)
 - [Configuration](#configuration)
-- [AI Reviewer Persona](#ai-reviewer-persona)
-- [Research Capabilities](#research-capabilities)
-- [Human-in-the-Loop Safeguards](#human-in-the-loop-safeguards)
-- [Architecture](#architecture)
-- [UI Components](#ui-components)
-- [Implementation Plan](#implementation-plan)
-- [API Endpoints](#api-endpoints)
+- [How It Works](#how-it-works)
+- [Speaker Context](#speaker-context)
+- [Admin Dashboard](#admin-dashboard)
+- [Privacy & Security](#privacy--security)
 - [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Overview
 
-The AI Paper Reviewer plugin acts as an automated program committee member, providing intelligent analysis of talk submissions. Unlike simple scoring systems, it:
+The AI Paper Reviewer plugin acts as an automated program committee member, providing intelligent analysis of talk submissions. Key characteristics:
 
 - **Uses the event's configured review criteria** - Scores align with what human reviewers evaluate
-- **Has a defined persona** - Acts as an experienced conference reviewer with configurable strictness
-- **Performs research** - Checks for duplicate/similar talks and researches speaker background
-- **Provides confidence levels** - Knows when it's uncertain and flags low-confidence results
-- **Respects human judgment** - Assists reviewers rather than replacing them
+- **Configurable strictness** - Lenient, Moderate, or Strict review standards
+- **Speaker context awareness** - Considers speaker bio, experience, and expertise (v1.13.0+)
+- **Duplicate detection** - Identifies similar submissions within the event
+- **Confidence levels** - Knows when it's uncertain and flags low-confidence results
+- **Multi-provider support** - OpenAI, Anthropic (Claude), and Google Gemini
 
 ### Why a Plugin?
-
-Rather than building AI review into the core application:
 
 | Concern | Plugin Approach |
 |---------|-----------------|
 | **Cost** | Only organizations that want AI review pay for API calls |
 | **Privacy** | Some orgs may not want submissions sent to external AI |
-| **Provider Choice** | Users can pick OpenAI, Anthropic, Google, or future providers |
+| **Provider Choice** | Users can pick OpenAI, Anthropic, or Google |
 | **Modularity** | Can be disabled/removed without affecting core functionality |
 | **Updates** | Plugin updates independently of the main application |
 
 ---
 
-## Plugin Distribution
+## Features
 
-The AI Paper Reviewer plugin lives in a **separate GitHub repository** (`cfp-directory-plugins`), not bundled with the main CFP Directory application.
+### Current Features (v1.13.0)
 
-### Installation Methods
+- **Multi-provider support**: OpenAI, Anthropic (Claude), Google Gemini
+- **Dynamic model selection**: Fetches available models from your provider
+- **Event-aware criteria**: Uses the event's configured review criteria and weights
+- **Speaker profile context**: Includes speaker bio, experience level, expertise tags, and social profiles
+- **Co-speaker support**: Considers all speakers when reviewing
+- **Configurable strictness**: Lenient, Moderate, or Strict review standards
+- **Duplicate detection**: Identifies similar submissions within the event
+- **Confidence thresholds**: Flag or hide unreliable recommendations
+- **Custom personas**: Define custom reviewer personas
+- **Re-review capability**: Re-analyze submissions after updates
+- **Auto-review**: Automatically review new submissions
+- **Review history**: View all AI reviews with filtering
+- **Admin dashboard**: Statistics, job status, and recent reviews
 
-**1. One-Click Install (Official Plugins)**
+### Privacy Features
 
-From Admin > Plugins > Available Plugins:
-- Browse official plugins from the registry
-- Click "Install" to automatically download and set up
-- Configure settings and enable
-
-**2. Manual Upload (Third-Party Plugins)**
-
-From Admin > Plugins > Upload Plugin:
-- Download plugin zip from any source
-- Upload via the admin interface
-- Review permissions and enable
-
-### Update Notifications
-
-The system automatically checks for plugin updates and shows notifications in the admin interface when newer versions are available.
-
-### Repository Structure
-
-```
-cfp-directory-plugins/
-├── registry.json                 # Plugin registry manifest
-├── plugins/
-│   ├── ai-paper-reviewer/
-│   │   ├── manifest.json
-│   │   ├── index.ts
-│   │   ├── lib/
-│   │   │   ├── prompts.ts        # AI persona & prompt templates
-│   │   │   ├── schema.ts         # JSON validation
-│   │   │   ├── research.ts       # Duplicate/speaker research
-│   │   │   └── providers/
-│   │   │       ├── openai.ts
-│   │   │       ├── anthropic.ts
-│   │   │       └── gemini.ts
-│   │   └── components/
-│   │       ├── ai-review-panel.tsx
-│   │       └── low-confidence-card.tsx
-│   └── (other-plugins)/
-└── .github/workflows/
-    └── release.yml               # Auto-build releases
-```
+- **No email sent to AI**: Speaker email addresses are never sent to AI providers
+- **Public info only**: Only publicly-available information (name, bio, social handles) is shared
+- **Local processing**: Duplicate detection runs locally, not via AI
 
 ---
 
-## Features
+## Installation
 
-### v1.0.0 (Current Release)
+### From the Gallery (Recommended)
 
-- **Multi-provider support**: OpenAI, Anthropic, Google Gemini
-- **Event-aware criteria**: Uses the event's configured review criteria and weights
-- **Configurable strictness**: Lenient, Moderate, or Strict review standards
-- **AI persona**: Consistent, professional reviewer behavior
-- **Duplicate detection**: Identifies similar submissions within the event
-- **Speaker research**: Optional background research on speakers
-- **Confidence thresholds**: Hide unreliable recommendations
-- **Admin override**: Show hidden results when needed
-- **JSON validation with retry**: Robust response parsing
-- **Audit trail**: Raw responses stored for debugging
+1. Go to **Admin > Plugins**
+2. Find "AI Paper Reviewer" in the Official Plugins gallery
+3. Click **Install** and acknowledge the security warning
+4. Configure your API key and preferences
+5. Click **Enable**
 
-### v1.1.0 (Planned)
+### Manual Installation
 
-- Manual re-analysis trigger button
-- Custom prompt templates
-- Cost tracking per submission
-- Batch analysis for existing submissions
-
-### v1.2.0 (Planned)
-
-- Side-by-side human vs AI comparison
-- AI agreement scoring (how often AI matches human reviewers)
-- Export AI analysis data
-- Cross-reference with past events
+1. Download the plugin from [GitHub Releases](https://github.com/l33tdawg/cfp-directory-official-plugins/releases)
+2. Extract to `plugins/ai-paper-reviewer/`
+3. Restart the application
+4. Go to **Admin > Plugins** and enable
 
 ---
 
 ## Configuration
 
-### Full Configuration Schema
+### Required Settings
 
-```json
-{
-  "name": "ai-paper-reviewer",
-  "displayName": "AI Paper Reviewer",
-  "version": "1.0.0",
-  "apiVersion": "1.0",
-  "description": "Intelligent submission analysis with research capabilities",
-  "author": "CFP Directory",
-  "permissions": ["submissions:read", "reviews:write", "events:read"],
-  "configSchema": {
-    "type": "object",
-    "properties": {
-      "provider": {
-        "type": "string",
-        "title": "AI Provider",
-        "enum": ["openai", "anthropic", "gemini"],
-        "default": "openai"
-      },
-      "apiKey": {
-        "type": "string",
-        "title": "API Key",
-        "description": "API key for your chosen provider",
-        "format": "password"
-      },
-      "model": {
-        "type": "string",
-        "title": "Model",
-        "description": "AI model to use (options depend on provider)"
-      },
-      "temperature": {
-        "type": "number",
-        "title": "Temperature",
-        "description": "0.0 = consistent, 1.0 = creative",
-        "default": 0.3,
-        "minimum": 0,
-        "maximum": 1
-      },
-      "maxTokens": {
-        "type": "number",
-        "title": "Max Tokens",
-        "default": 2000,
-        "minimum": 500,
-        "maximum": 8000
-      },
-      "useEventCriteria": {
-        "type": "boolean",
-        "title": "Use Event Review Criteria",
-        "description": "When enabled, uses the event's configured review criteria",
-        "default": true
-      },
-      "strictnessLevel": {
-        "type": "string",
-        "title": "Review Strictness",
-        "enum": ["lenient", "moderate", "strict"],
-        "default": "moderate"
-      },
-      "reviewFocus": {
-        "type": "array",
-        "title": "Review Focus Areas",
-        "items": { "type": "string" },
-        "default": ["constructive", "balanced"]
-      },
-      "customPersona": {
-        "type": "string",
-        "title": "Custom Persona (Optional)",
-        "description": "Additional persona instructions for the AI reviewer",
-        "format": "textarea"
-      },
-      "enableDuplicateDetection": {
-        "type": "boolean",
-        "title": "Duplicate Detection",
-        "description": "Check for similar submissions in the same event",
-        "default": true
-      },
-      "duplicateThreshold": {
-        "type": "number",
-        "title": "Similarity Threshold",
-        "description": "Flag submissions above this similarity (0.0-1.0)",
-        "default": 0.7,
-        "minimum": 0.5,
-        "maximum": 0.95
-      },
-      "enableSpeakerResearch": {
-        "type": "boolean",
-        "title": "Speaker Research",
-        "description": "Research speaker background (requires additional API)",
-        "default": false
-      },
-      "confidenceThreshold": {
-        "type": "number",
-        "title": "Confidence Threshold",
-        "description": "Hide recommendations below this confidence",
-        "default": 0.6,
-        "minimum": 0,
-        "maximum": 1
-      },
-      "lowConfidenceBehavior": {
-        "type": "string",
-        "title": "Low Confidence Behavior",
-        "enum": ["hide", "warn", "require_override"],
-        "default": "warn"
-      },
-      "autoReview": {
-        "type": "boolean",
-        "title": "Auto-Review New Submissions",
-        "default": true
-      }
-    },
-    "required": ["apiKey"]
-  }
-}
-```
+| Setting | Description |
+|---------|-------------|
+| **AI Provider** | OpenAI, Anthropic, or Gemini |
+| **API Key** | Your provider's API key (stored encrypted) |
 
-### Model Options by Provider
+### Review Style Settings
 
-| Provider | Available Models |
-|----------|------------------|
-| **OpenAI** | gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo |
-| **Anthropic** | claude-sonnet-4-20250514, claude-3-5-haiku-20241022, claude-3-opus-20240229 |
-| **Google** | gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash |
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Model** | gpt-4o | AI model to use (options loaded from provider) |
+| **Review Strictness** | Moderate | How critical the AI should be |
+| **Use Event Criteria** | Yes | Match reviews to event's scoring criteria |
+
+### Automation Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Auto-Review** | Yes | Automatically review new submissions |
+| **Show AI on Team Page** | No | List AI reviewer publicly |
+
+### Quality Checks
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Duplicate Detection** | Yes | Flag similar submissions |
+| **Similarity Threshold** | 0.7 | How similar before flagging (0.5-0.95) |
+
+### Advanced Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Temperature** | 0.3 | Response variability (0 = consistent, 1 = creative) |
+| **Confidence Threshold** | 0.5 | Flag reviews below this confidence |
+| **Re-review Cooldown** | 5 min | Wait time before auto re-reviewing edited submissions |
+| **Max Response Tokens** | 4096 | Maximum AI response length |
+| **Max Input Characters** | 50000 | Maximum submission text size |
 
 ### Strictness Levels
 
@@ -266,459 +141,246 @@ cfp-directory-plugins/
 
 ---
 
-## AI Reviewer Persona
+## How It Works
 
-The AI reviewer has a defined, consistent persona that behaves like an experienced program committee member.
-
-### System Prompt Structure
+### Analysis Flow
 
 ```
-You are an experienced conference paper reviewer serving on the program 
-committee for "{event_name}". Your role is to provide fair, constructive, 
-and thorough evaluations of talk submissions.
-
-EVENT CONTEXT:
-- Event: {event_name}
-- Description: {event_description}
-- Target Audience: {event_audience}
-- Event Type: {event_type}
-
-REVIEW CRITERIA (from event configuration):
-{foreach criteria}
-- {criteria.name} (weight: {criteria.weight}/5): {criteria.description}
-{/foreach}
-
-STRICTNESS LEVEL: {strictness_level}
-{strictness_instructions}
-
-{if duplicate_detection}
-SIMILAR SUBMISSIONS DETECTED:
-{similar_submissions}
-Consider whether this submission offers a unique perspective.
-{/if}
-
-{if speaker_research}
-SPEAKER BACKGROUND:
-{speaker_info}
-Consider the speaker's experience when evaluating presentation capability.
-{/if}
-
-YOUR TASK:
-1. Analyze the submission against each review criterion
-2. Provide scores (1-5) for each criterion based on event weights
-3. Calculate an overall recommendation
-4. List specific strengths and weaknesses
-5. Provide actionable suggestions for improvement
-6. Set your confidence level (0.0-1.0) based on information quality
-
-IMPORTANT GUIDELINES:
-- Be objective and fair to all submissions
-- Consider the specific event audience
-- Acknowledge limitations in your assessment
-- Set confidence LOW if:
-  - The abstract is vague or lacks detail
-  - You're unsure about technical claims
-  - The topic is outside typical conference scope
-  - Speaker information is insufficient
-
-{custom_persona}
+New Submission
+      │
+      ▼
+┌─────────────────┐
+│ Fetch Event     │  (criteria, description, audience)
+│ Context         │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Fetch Speaker   │  (bio, experience, expertise, social profiles)
+│ Info            │  NOTE: Email excluded for privacy
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Duplicate       │  (if enabled)
+│ Detection       │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Build AI        │  (persona + context + criteria + speaker info)
+│ Prompt          │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Call AI         │
+│ Provider        │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐     Invalid
+│ Parse & Validate│─────────────▶ Retry with repair prompt
+│ JSON Response   │
+└────────┬────────┘
+         │ Valid
+         ▼
+┌─────────────────┐
+│ Store Review    │  (in core reviews table)
+│ & Display       │
+└─────────────────┘
 ```
 
-### Strictness Instructions
+### AI Response Structure
 
-**Lenient:**
-```
-Be encouraging and supportive. Focus on the submission's potential 
-rather than its flaws. Give the benefit of the doubt when information 
-is incomplete. Recommend acceptance for submissions that show promise, 
-even if they need polish.
-```
-
-**Moderate:**
-```
-Provide a balanced assessment. Acknowledge both strengths and weaknesses 
-fairly. Base your recommendation on the overall quality relative to 
-typical conference standards. Neither overly harsh nor overly generous.
-```
-
-**Strict:**
-```
-Apply high standards expected of top-tier conferences. Submissions must 
-demonstrate clear value, technical accuracy, and excellent presentation. 
-Be thorough in identifying issues. Only recommend acceptance for 
-submissions that meet excellence criteria.
-```
-
----
-
-## Research Capabilities
-
-### Duplicate/Similar Talk Detection
-
-The AI reviewer can identify submissions that may be duplicates or cover very similar ground.
-
-**How it works:**
-1. When a submission is analyzed, existing submissions for the same event are retrieved
-2. Text similarity is computed using embeddings or keyword matching
-3. Submissions above the threshold (default 70%) are flagged
-4. The AI receives this context: "Similar submissions found: [titles]"
-5. The AI considers uniqueness in its evaluation
-
-**Configuration:**
-```typescript
-enableDuplicateDetection: true
-duplicateThreshold: 0.7  // 70% similarity
-```
-
-**UI Display:**
-```
-┌─────────────────────────────────────────────────────────────┐
-│ ⚠️ Similar Submissions Detected                              │
-├─────────────────────────────────────────────────────────────┤
-│ This submission appears similar to:                         │
-│ • "Introduction to Kubernetes" (82% similar)                │
-│ • "Container Orchestration 101" (71% similar)               │
-│                                                             │
-│ Consider whether this offers a unique perspective.          │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Speaker Research
-
-Optional feature to research speaker background based on their name.
-
-**How it works:**
-1. Extract speaker name from submission or user profile
-2. Perform web search for speaker (LinkedIn, GitHub, conference history)
-3. Summarize relevant background (talks given, expertise areas)
-4. Include in AI context for evaluation
-
-**Privacy Considerations:**
-- This feature is **opt-in** and disabled by default
-- Only uses publicly available information
-- Results are cached to minimize API calls
-- Admins should inform speakers that research may be performed
-
-**Configuration:**
-```typescript
-enableSpeakerResearch: false  // Disabled by default
-```
-
----
-
-## Human-in-the-Loop Safeguards
-
-AI analysis assists reviewers but should never replace human judgment. These safeguards prevent over-reliance on AI.
-
-### Confidence Threshold
-
-The AI provides a confidence score (0.0-1.0) indicating how reliable it believes its assessment is.
-
-**When confidence is low:**
-- Abstract is vague or lacks detail
-- Technical claims cannot be verified
-- Topic is unusual for the event type
-- Insufficient information to evaluate
-
-### Low Confidence Behaviors
-
-| Behavior | Description |
-|----------|-------------|
-| **hide** | Recommendation completely hidden, only scores shown |
-| **warn** | Full results shown with prominent warning banner |
-| **require_override** | Hidden until admin explicitly approves showing |
-
-### UI States
-
-**Above threshold (normal):**
-```
-┌─────────────────────────────────────────────────┐
-│ 🤖 AI Review          4.2/5    [Accept]         │
-├─────────────────────────────────────────────────┤
-│ Summary: Strong technical submission with       │
-│ clear value proposition...                      │
-│                                                 │
-│ Confidence: 85%  ████████░░                     │
-└─────────────────────────────────────────────────┘
-```
-
-**Below threshold (warn mode):**
-```
-┌─────────────────────────────────────────────────┐
-│ 🤖 AI Review          3.5/5    [Neutral]        │
-├─────────────────────────────────────────────────┤
-│ ⚠️ LOW CONFIDENCE (45%)                          │
-│ This assessment may be unreliable. Use as       │
-│ supplementary input only.                       │
-│                                                 │
-│ Summary: The abstract lacks specific details... │
-└─────────────────────────────────────────────────┘
-```
-
-**Below threshold (hidden mode):**
-```
-┌─────────────────────────────────────────────────┐
-│ 🤖 AI Review          [Low Confidence]          │
-├─────────────────────────────────────────────────┤
-│ ⚠️ AI recommendation hidden due to low          │
-│ confidence (45% < 60% threshold).               │
-│                                                 │
-│ This prevents potentially unreliable AI         │
-│ assessments from influencing decisions.         │
-│                                                 │
-│ [🔓 Admin: Show Anyway]                         │
-└─────────────────────────────────────────────────┘
-```
-
----
-
-## Architecture
-
-### Data Flow
-
-```
-┌─────────────────────┐
-│  New Submission     │
-└──────────┬──────────┘
-           │ submission.created hook
-           ▼
-┌─────────────────────┐
-│  Fetch Event Data   │ (criteria, description, audience)
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Duplicate Check    │ (if enabled)
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Speaker Research   │ (if enabled)
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Build AI Prompt    │ (persona + context + criteria)
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Call AI Provider   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐     Invalid
-│  Validate JSON      │─────────────▶ Retry with repair
-└──────────┬──────────┘               prompt (max 2x)
-           │ Valid
-           ▼
-┌─────────────────────┐
-│  Store Result       │ (with audit trail)
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  UI Displays        │ (with confidence check)
-└─────────────────────┘
-```
-
-### Analysis Result Structure
+The AI returns structured JSON with:
 
 ```typescript
-interface AiAnalysisResult {
-  // Scores (1-5, matching event criteria)
-  criteriaScores: Record<string, number>;
-  overallScore: number;
-  
-  // Feedback
-  summary: string;
-  strengths: string[];
-  weaknesses: string[];
-  suggestions: string[];
-  
-  // Recommendation
-  recommendation: 'STRONG_ACCEPT' | 'ACCEPT' | 'NEUTRAL' | 'REJECT' | 'STRONG_REJECT';
-  confidence: number;  // 0.0 - 1.0
-  
-  // Research results
-  similarSubmissions?: Array<{
-    id: string;
-    title: string;
-    similarity: number;
-  }>;
-  speakerResearch?: string;
-  
-  // Audit
-  provider: string;
-  model: string;
-  rawResponse: string;
-  parseAttempts: number;
-  repairApplied: boolean;
-  analyzedAt: string;
+{
+  criteriaScores: Record<string, number>,  // 1-5 per criterion
+  overallScore: number,                     // 1-5
+  summary: string,                          // 2-3 sentence summary
+  strengths: string[],                      // List of strengths
+  weaknesses: string[],                     // List of weaknesses
+  suggestions: string[],                    // Actionable suggestions
+  recommendation: string,                   // STRONG_ACCEPT to STRONG_REJECT
+  confidence: number                        // 0.0 to 1.0
 }
 ```
 
 ---
 
-## UI Components
+## Speaker Context
 
-### AI Review Panel
+### What's Included (v1.13.0+)
 
-Displayed on the submission review page via `submission.review.panel` slot.
+The AI receives the following speaker information to better evaluate submissions:
 
-```tsx
-export function AiReviewPanel({ context, data }: PluginComponentProps) {
-  const { submissionId, isAdmin, eventId } = context;
-  const [analysis, setAnalysis] = useState<AiAnalysisResult | null>(null);
-  const [showOverridden, setShowOverridden] = useState(false);
-  
-  // Fetch analysis from completed job
-  // Check confidence against threshold
-  // Render appropriate state (loading, processing, low-confidence, full)
-  
-  return (
-    <Card>
-      <CardHeader>
-        <h3>AI Review</h3>
-        <RecommendationBadge recommendation={analysis.recommendation} />
-        <ConfidenceIndicator value={analysis.confidence} />
-      </CardHeader>
-      
-      {isLowConfidence && !showOverridden ? (
-        <LowConfidenceCard onOverride={() => setShowOverridden(true)} />
-      ) : (
-        <CardContent>
-          <Summary text={analysis.summary} />
-          <CriteriaScores scores={analysis.criteriaScores} eventCriteria={eventCriteria} />
-          <StrengthsList items={analysis.strengths} />
-          <WeaknessesList items={analysis.weaknesses} />
-          <SuggestionsList items={analysis.suggestions} />
-          {analysis.similarSubmissions && (
-            <SimilarSubmissionsAlert submissions={analysis.similarSubmissions} />
-          )}
-          {analysis.speakerResearch && (
-            <SpeakerResearchSection content={analysis.speakerResearch} />
-          )}
-          <Footer provider={analysis.provider} model={analysis.model} timestamp={analysis.analyzedAt} />
-        </CardContent>
-      )}
-    </Card>
-  );
-}
-```
+**Primary Speaker:**
+- Name
+- Position / Company
+- Experience Level (First-time, Experienced, Professional, Keynote)
+- Expertise Tags
+- Bio
+- Speaking Experience description
+- Social Profiles (LinkedIn, Twitter/X, GitHub, Website)
 
-### Configuration UI (Admin)
+**Co-Speakers:**
+- Name
+- Bio
 
-The plugin configuration form in Admin > Plugins supports:
+### What's Excluded (Privacy)
 
-- **Provider Section**: Provider dropdown, API key, model selection, temperature slider
-- **Criteria Section**: Toggle for event criteria, manual override options
-- **Strictness Section**: Strictness level selector, review focus checkboxes
-- **Research Section**: Duplicate detection toggle with threshold, speaker research toggle
-- **Safeguards Section**: Confidence threshold, low-confidence behavior selector
-- **Automation Section**: Auto-review toggle
+- **Email addresses** - Never sent to AI
+- **Passwords / Auth data** - Never accessible
+- **Private notes** - Only public profile info
+
+### How It Helps
+
+With speaker context, the AI can:
+- Better assess speaker credibility for technical topics
+- Consider speaking experience when evaluating presentation capability
+- Recognize domain expertise that supports the submission content
+- Provide more accurate "Speaker Experience" criterion scores
 
 ---
 
-## Implementation Plan
+## Admin Dashboard
 
-### Phase 1: Enhanced Configuration
-- Update manifest with full config schema
-- Implement provider-specific model lists
-- Add temperature and strictness settings
-- Support event criteria integration
+Access via **Admin > Plugins > AI Reviews > Dashboard**
 
-### Phase 2: AI Persona & Prompts
-- Create `lib/prompts.ts` with template system
-- Implement strictness level prompts
-- Add custom persona support
-- Build dynamic prompt from event context
+### Overview Stats
+- Total reviews completed
+- Pending reviews
+- Failed reviews
+- Average score
+- Success rate
 
-### Phase 3: Research Features
-- Implement duplicate detection with embeddings
-- Add speaker research capability (optional)
-- Include research context in AI prompts
-- Display research results in UI
+### Job Status
+- See pending/running AI review jobs
+- Monitor processing status
 
-### Phase 4: Human-in-the-Loop
-- Implement confidence threshold logic
-- Add low-confidence UI states
-- Build admin override functionality
-- JSON validation with retry
+### Recent Reviews
+- View latest AI reviews with scores
+- Quick links to submissions
+- Deduplicated by submission (shows most recent)
 
-### Phase 5: Google Gemini Support
-- Add Gemini provider in `lib/providers/gemini.ts`
-- Test with Gemini models
-- Update model selection UI
+### Additional Pages
 
-### Phase 6: UI Polish
-- Enhanced review panel with all features
-- Re-analyze button
-- Confidence indicators
-- Research results display
-- Stats dashboard improvements
+- **Review History** - Full searchable history with filters
+- **Reviewer Personas** - Create custom AI reviewer personas
 
 ---
 
-## API Endpoints
+## Privacy & Security
 
-The plugin adds these API routes (via plugin route system):
+### Data Sent to AI Providers
 
-```
-GET  /api/plugins/ai-paper-reviewer/analysis/:submissionId
-     Returns AI analysis for a submission
+| Data Type | Sent | Notes |
+|-----------|------|-------|
+| Submission title | Yes | Required for analysis |
+| Abstract | Yes | Required for analysis |
+| Outline | Yes | If provided |
+| Target audience | Yes | If provided |
+| Prerequisites | Yes | If provided |
+| Speaker name | Yes | Public info |
+| Speaker bio | Yes | Public info |
+| Speaker experience | Yes | Public info |
+| Social handles | Yes | Public info |
+| **Email addresses** | **No** | Explicitly excluded |
+| **Passwords** | **No** | Never accessible |
 
-POST /api/plugins/ai-paper-reviewer/analyze/:submissionId
-     Manually trigger analysis for a submission
+### API Key Security
 
-GET  /api/plugins/ai-paper-reviewer/stats
-     Returns aggregate statistics for the event
+- API keys are stored encrypted in the database
+- Keys are never logged or exposed to the client
+- Keys are only used server-side for AI calls
 
-GET  /api/plugins/ai-paper-reviewer/similar/:submissionId
-     Returns similar submissions (duplicate detection)
-```
+### Service Account
+
+The plugin creates a non-privileged service account to author reviews:
+- Cannot log in (no password)
+- REVIEWER role (non-privileged)
+- Hidden from public team page by default
+- Email: `ai-paper-reviewer@plugin.system`
 
 ---
 
 ## Troubleshooting
 
-### Analysis not running
+### Reviews Not Running
 
-1. Check plugin is enabled in Admin > Plugins
+1. Check plugin is **enabled** in Admin > Plugins
 2. Verify API key is configured correctly
-3. Check `autoReview` is enabled
-4. Look at plugin logs (Admin > Plugins > [plugin] > Logs)
+3. Check **Auto-Review** is enabled (or trigger manually)
+4. Look at plugin logs: Admin > Plugins > AI Paper Reviewer > Logs
 
-### Invalid JSON errors
+### Low Scores on All Submissions
+
+1. Check if event review criteria have descriptions
+2. Abstracts may lack sufficient detail
+3. Try **Lenient** strictness level
+4. Verify model is appropriate (try gpt-4o)
+
+### "Speaker Experience" Score is Low
+
+1. Ensure speakers have completed their profiles with:
+   - Bio
+   - Speaking experience description
+   - Experience level selection
+   - Expertise tags
+2. Co-speakers should have bios added
+
+### Invalid JSON Errors
 
 1. Check plugin logs for raw AI responses
-2. May indicate prompt issues with specific model
-3. Try a different model (e.g., gpt-4o instead of gpt-3.5-turbo)
-4. Check if temperature is too high (try 0.2-0.3)
+2. Try a different model (gpt-4o is most reliable)
+3. Lower temperature to 0.2-0.3
+4. Check if max tokens is sufficient
 
-### Low confidence on all submissions
+### High Similarity False Positives
 
-1. Event review criteria may be too vague - add descriptions
-2. Abstracts may lack sufficient detail
-3. Consider lowering confidence threshold temporarily
-4. Check if model is appropriate for your domain
-
-### High similarity false positives
-
-1. Lower the duplicate threshold (e.g., 0.8 instead of 0.7)
+1. Increase similarity threshold (e.g., 0.8 instead of 0.7)
 2. Review flagged submissions manually
 3. Consider disabling if your event has intentionally similar tracks
 
-### API rate limits
+### API Rate Limits
 
 1. Check provider dashboard for usage
 2. Disable auto-review, use manual trigger instead
 3. Consider a less expensive model for initial screening
-4. Add delays between submissions if bulk-importing
+4. Increase re-review cooldown if speakers are editing frequently
 
-### Speaker research not working
+---
 
-1. Verify the feature is enabled
-2. Check if web search API key is configured
-3. Some speakers may have limited public presence
-4. Results are cached - wait for cache expiry or clear manually
+## Changelog
+
+### v1.13.0
+- Added speaker profile context (bio, experience, expertise, social profiles)
+- Added co-speaker information
+- Privacy: Email addresses excluded from AI context
+
+### v1.12.0
+- Security hardening
+- Plugin install security acknowledgement
+
+### v1.11.0
+- Deduplication of Recent Reviews by submission
+
+### v1.10.x
+- Re-review handling improvements
+- Unique constraint handling
+
+### v1.9.0
+- Admin dashboard improvements
+- Review history filtering
+
+### v1.8.0
+- Custom reviewer personas
+
+### v1.7.0
+- Gemini provider support
+- Dynamic model fetching
+
+### Earlier versions
+- Core functionality: OpenAI/Anthropic support, auto-review, duplicate detection, confidence thresholds

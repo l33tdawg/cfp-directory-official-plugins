@@ -102,6 +102,33 @@ export interface AiAnalysisResult {
 // =============================================================================
 
 /**
+ * Speaker info for submission text
+ * NOTE: Email is intentionally excluded for privacy - only public info is sent to AI
+ */
+interface SpeakerInfo {
+  name: string | null;
+  bio: string | null;
+  speakingExperience: string | null;
+  experienceLevel: string | null;
+  company: string | null;
+  position: string | null;
+  expertiseTags: string[];
+  // Social handles (public info, safe to share with AI)
+  linkedinUrl: string | null;
+  twitterHandle: string | null;
+  githubUsername: string | null;
+  websiteUrl: string | null;
+}
+
+/**
+ * Co-speaker info for submission text
+ */
+interface CoSpeakerInfo {
+  name: string;
+  bio: string | null;
+}
+
+/**
  * Build submission text for AI analysis from a submission object
  */
 export function buildSubmissionText(submission: {
@@ -110,6 +137,8 @@ export function buildSubmissionText(submission: {
   outline?: string | null;
   targetAudience?: string | null;
   prerequisites?: string | null;
+  speaker?: SpeakerInfo | null;
+  coSpeakers?: CoSpeakerInfo[];
 }): string {
   const parts = [`Title: ${submission.title}`];
 
@@ -124,6 +153,78 @@ export function buildSubmissionText(submission: {
   }
   if (submission.prerequisites) {
     parts.push(`\nPrerequisites: ${submission.prerequisites}`);
+  }
+
+  // Add speaker information section
+  if (submission.speaker) {
+    const speaker = submission.speaker;
+    const speakerParts: string[] = [];
+
+    if (speaker.name) {
+      speakerParts.push(`Name: ${speaker.name}`);
+    }
+    if (speaker.position && speaker.company) {
+      speakerParts.push(`Role: ${speaker.position} at ${speaker.company}`);
+    } else if (speaker.position) {
+      speakerParts.push(`Role: ${speaker.position}`);
+    } else if (speaker.company) {
+      speakerParts.push(`Company: ${speaker.company}`);
+    }
+    if (speaker.experienceLevel) {
+      const levelLabels: Record<string, string> = {
+        NEW: 'First-time speaker',
+        EXPERIENCED: 'Experienced speaker (several talks at meetups/conferences)',
+        PROFESSIONAL: 'Professional speaker (regular at conferences)',
+        KEYNOTE: 'Keynote speaker level',
+      };
+      speakerParts.push(`Experience Level: ${levelLabels[speaker.experienceLevel] || speaker.experienceLevel}`);
+    }
+    if (speaker.expertiseTags && speaker.expertiseTags.length > 0) {
+      speakerParts.push(`Expertise Areas: ${speaker.expertiseTags.join(', ')}`);
+    }
+
+    // Social profiles (public info for AI to assess speaker credibility)
+    const socialLinks: string[] = [];
+    if (speaker.linkedinUrl) {
+      socialLinks.push(`LinkedIn: ${speaker.linkedinUrl}`);
+    }
+    if (speaker.twitterHandle) {
+      socialLinks.push(`Twitter/X: @${speaker.twitterHandle}`);
+    }
+    if (speaker.githubUsername) {
+      socialLinks.push(`GitHub: ${speaker.githubUsername}`);
+    }
+    if (speaker.websiteUrl) {
+      socialLinks.push(`Website: ${speaker.websiteUrl}`);
+    }
+    if (socialLinks.length > 0) {
+      speakerParts.push(`Social Profiles: ${socialLinks.join(', ')}`);
+    }
+
+    if (speaker.bio) {
+      speakerParts.push(`Bio: ${speaker.bio}`);
+    }
+    if (speaker.speakingExperience) {
+      speakerParts.push(`Speaking Experience: ${speaker.speakingExperience}`);
+    }
+
+    if (speakerParts.length > 0) {
+      parts.push(`\n--- PRIMARY SPEAKER ---\n${speakerParts.join('\n')}`);
+    }
+  }
+
+  // Add co-speaker information
+  if (submission.coSpeakers && submission.coSpeakers.length > 0) {
+    const coSpeakerParts: string[] = [];
+    for (let i = 0; i < submission.coSpeakers.length; i++) {
+      const coSpeaker = submission.coSpeakers[i];
+      const coSpeakerInfo: string[] = [`Name: ${coSpeaker.name}`];
+      if (coSpeaker.bio) {
+        coSpeakerInfo.push(`Bio: ${coSpeaker.bio}`);
+      }
+      coSpeakerParts.push(`Co-Speaker ${i + 1}:\n${coSpeakerInfo.join('\n')}`);
+    }
+    parts.push(`\n--- CO-SPEAKERS ---\n${coSpeakerParts.join('\n\n')}`);
   }
 
   return parts.join('\n');
@@ -667,24 +768,42 @@ export async function handleAiReviewJob(
   ctx.logger.info('Processing AI review job', { submissionId, isReReview: payload.isReReview });
 
   // For re-reviews or when abstract is missing, fetch full submission data
-  let submissionData = {
+  // NOTE: Email is intentionally excluded for privacy - only public info is sent to AI
+  let submissionData: {
+    title: string;
+    abstract: string | null;
+    outline: string | null;
+    targetAudience: string | null;
+    prerequisites: string | null;
+    speaker: SpeakerInfo | null;
+    coSpeakers: CoSpeakerInfo[];
+  } = {
     title: payload.title as string,
     abstract: payload.abstract as string | null,
     outline: payload.outline as string | null,
     targetAudience: payload.targetAudience as string | null,
     prerequisites: payload.prerequisites as string | null,
+    speaker: null,
+    coSpeakers: [],
   };
 
-  // Always fetch submission data to ensure we have complete info
+  // Always fetch submission data with speaker info to ensure we have complete info
   try {
-    const submission = await ctx.submissions.get(submissionId);
+    // Use getWithSpeakers if available (API v1.12.0+), fallback to get
+    const submission = typeof ctx.submissions.getWithSpeakers === 'function'
+      ? await ctx.submissions.getWithSpeakers(submissionId)
+      : await ctx.submissions.get(submissionId);
+
     // Security: Don't log content previews - only log metadata
     ctx.logger.info('Submission fetch result', {
       submissionId,
       found: !!submission,
       hasAbstract: !!submission?.abstract,
       abstractLength: submission?.abstract?.length || 0,
+      hasSpeakerInfo: !!(submission && 'speaker' in submission && submission.speaker),
+      coSpeakerCount: (submission && 'coSpeakers' in submission) ? (submission.coSpeakers as unknown[]).length : 0,
     });
+
     if (submission) {
       submissionData = {
         title: submission.title,
@@ -692,7 +811,52 @@ export async function handleAiReviewJob(
         outline: (submission as Record<string, unknown>).outline as string | null,
         targetAudience: (submission as Record<string, unknown>).targetAudience as string | null,
         prerequisites: (submission as Record<string, unknown>).prerequisites as string | null,
+        speaker: null,
+        coSpeakers: [],
       };
+
+      // Extract speaker info if available (from getWithSpeakers)
+      // NOTE: Email is intentionally excluded for privacy - only public info is sent to AI
+      if ('speaker' in submission && submission.speaker) {
+        const speaker = submission.speaker as {
+          name?: string | null;
+          profile?: {
+            fullName?: string | null;
+            bio?: string | null;
+            speakingExperience?: string | null;
+            experienceLevel?: string | null;
+            company?: string | null;
+            position?: string | null;
+            expertiseTags?: string[];
+            linkedinUrl?: string | null;
+            twitterHandle?: string | null;
+            githubUsername?: string | null;
+            websiteUrl?: string | null;
+          } | null;
+        };
+        submissionData.speaker = {
+          name: speaker.profile?.fullName || speaker.name || null,
+          bio: speaker.profile?.bio || null,
+          speakingExperience: speaker.profile?.speakingExperience || null,
+          experienceLevel: speaker.profile?.experienceLevel || null,
+          company: speaker.profile?.company || null,
+          position: speaker.profile?.position || null,
+          expertiseTags: speaker.profile?.expertiseTags || [],
+          linkedinUrl: speaker.profile?.linkedinUrl || null,
+          twitterHandle: speaker.profile?.twitterHandle || null,
+          githubUsername: speaker.profile?.githubUsername || null,
+          websiteUrl: speaker.profile?.websiteUrl || null,
+        };
+      }
+
+      // Extract co-speaker info if available
+      if ('coSpeakers' in submission && Array.isArray(submission.coSpeakers)) {
+        submissionData.coSpeakers = (submission.coSpeakers as Array<{ name: string; bio?: string | null }>).map((cs) => ({
+          name: cs.name,
+          bio: cs.bio || null,
+        }));
+      }
+
       // Also get eventId from submission if not provided
       if (!eventId) {
         eventId = submission.eventId;
@@ -804,6 +968,8 @@ export async function handleAiReviewJob(
       outline: submissionData.outline,
       targetAudience: submissionData.targetAudience,
       prerequisites: submissionData.prerequisites,
+      speaker: submissionData.speaker,
+      coSpeakers: submissionData.coSpeakers,
     });
 
     // 5. Call AI with temperature and parse with retry

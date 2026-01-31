@@ -26,7 +26,7 @@
         "submission.updated"
       ],
       "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/ai-paper-reviewer-v1.14.1/ai-paper-reviewer-v1.14.1.zip",
-      "sha256": "995b41341b0969570bf1b681320199aadbd264b855b07f23fdefc723a7cbfdba"
+      "sha256": "4f8f22b30a9d2ae310521bf652434b7db8e1043e5aa06872d46ba8993e86df18"
     },
     {
       "name": "example-webhook",

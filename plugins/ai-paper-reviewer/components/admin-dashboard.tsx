@@ -537,7 +537,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
 
       // Deduplicate by submissionId, keeping only the most recent review for each
       const seenSubmissions = new Set<string>();
-      const recent = allReviews.filter((review) => {
+      const recent = allReviews.filter((review: { submissionId: string | null }) => {
         if (!review.submissionId) return true; // Keep reviews without submissionId
         if (seenSubmissions.has(review.submissionId)) return false;
         seenSubmissions.add(review.submissionId);

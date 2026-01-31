@@ -13,6 +13,10 @@ Automatically analyzes paper/talk submissions using AI to provide preliminary re
 - **Confidence thresholds** - Hide unreliable AI recommendations automatically
 - **JSON repair** - Robust response parsing with automatic retry
 - **Admin dashboard** - Review stats, job queue status, and bulk review actions
+- **Cost tracking** - Monitor API spending with budget limits and alerts
+- **Speaker context** - AI considers speaker profile, experience, and past talks
+- **Re-review capability** - Trigger new reviews for updated submissions
+- **Expandable details** - Collapsible review sections for cleaner UI
 
 ## Installation
 
@@ -43,9 +47,11 @@ Automatically analyzes paper/talk submissions using AI to provide preliminary re
 | **Review Strictness** | Lenient, Moderate, or Strict | `moderate` |
 | **Duplicate Detection** | Check for similar submissions | `true` |
 | **Similarity Threshold** | Flag submissions above this similarity | `0.7` |
-| **Confidence Threshold** | Hide recommendations below this confidence | `0.6` |
-| **Low Confidence Behavior** | Hide, Warn, or Require Override | `warn` |
+| **Confidence Threshold** | Hide recommendations below this confidence | `0.5` |
 | **Auto-Review** | Automatically review new submissions | `true` |
+| **Monthly Budget Limit** | Maximum monthly spend in USD (0 = unlimited) | `0` |
+| **Budget Alert Threshold** | Show warning at this % of budget | `80` |
+| **Pause on Budget Exceeded** | Stop auto-reviews when budget is reached | `true` |
 | **Re-review Cooldown** | Minimum wait between re-reviews (minutes) | `5` |
 | **Show on Team Page** | Display AI reviewer on public team page | `false` |
 
@@ -94,6 +100,16 @@ Access via **Admin > Plugins > AI Reviews**:
 | `submission.created` | Queues AI review for new submissions (if auto-review is enabled) |
 | `submission.updated` | Queues re-review when title, abstract, or outline changes (respects cooldown) |
 
+## Actions
+
+| Action | Description |
+|--------|-------------|
+| `list-models` | Fetches available models from the configured AI provider |
+| `clear-reviews` | Deletes all AI-generated reviews (for testing/reset) |
+| `delete-review` | Deletes a specific AI-generated review |
+| `reset-budget` | Resets the monthly spending counter to zero |
+| `get-cost-stats` | Returns current spending, budget status, and cost breakdown |
+
 ## UI Components
 
 - **AI Review Panel** (`submission.review.panel` slot) - Displays AI analysis results with confidence indicator, criteria scores, strengths/weaknesses, suggestions, and similar submission alerts
@@ -131,50 +147,83 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.7.1 (Current)
+### v1.14.1 (Current)
+- Fix: TypeScript type annotation for filter callback
+- Fix: Release package now includes pre-built admin bundle
+
+### v1.14.0
+- **Cost tracking and budget management**
+  - Track API spending per review with token counts
+  - Set monthly budget limits with automatic pause
+  - Budget alert thresholds with dashboard warnings
+  - Reset budget action for new billing periods
+  - Cost statistics in dashboard header
+
+### v1.13.0
+- **Speaker context in AI reviews**
+  - AI considers speaker profile, bio, and experience level
+  - Past speaking history and expertise tags included
+  - Social profiles (LinkedIn, Twitter, GitHub) for context
+  - Co-speaker information included in analysis
+
+### v1.12.0
+- **Security hardening**
+  - Resource exhaustion protections (input limits, rate limiting)
+  - Secure API key handling (server-side only)
+  - Input validation and sanitization
+
+### v1.11.0
+- **Comprehensive security review**
+  - XSS prevention in all user-facing content
+  - Safe JSON parsing with size limits
+  - Audit logging for sensitive operations
+
+### v1.10.x
+- Expandable review details with re-review capability
+- Criteria scores displayed in table format at top
+- Deduplicated Recent Reviews section
+- Handle unique constraint on re-review gracefully
+- Removed public notes (admins decide what feedback to share)
+
+### v1.9.0
+- Re-review submissions with updated content
+- Clear review history action
+- More robust JSON response parsing
+
+### v1.7.1
 - Dashboard "Jobs in Progress" section shows pending/running jobs
 - Auto-refresh when jobs are active (every 5 seconds)
-- Fix: Model fetching now uses form's current API key (not just saved config)
-- Requires cfp-directory-self-hosted v1.14.0+
+- Fix: Model fetching now uses form's current API key
 
 ### v1.7.0
-- Dynamic model fetching - validates API keys and shows real model list from provider
+- Dynamic model fetching from provider APIs
 - API key validation at configuration time
-- Dashboard shows proper API key configuration status
-- Unit tests for dashboard and model fetcher
-- Requires cfp-directory-self-hosted v1.13.0+
+- Dashboard shows API key configuration status
 
 ### v1.6.0
 - Service account integration - plugin creates its own reviewer account
 - Core review integration - AI reviews stored in main reviews table
 - Reviews appear in standard submissions list with scores
 - Added "Show on Team Page" visibility option
-- Requires cfp-directory-self-hosted v1.12.0+
 
 ### v1.5.0
 - Admin dashboard with review stats and bulk actions
 - Review queue for unreviewed submissions
-- Improved tab styling and UI polish
 - Updated Anthropic models to Claude 4 series
 
 ### v1.4.0
 - Admin pages for Review History and Reviewer Personas
 - Sidebar navigation for plugin admin pages
-- Persona presets (Technical Expert, Business Analyst, etc.)
 
 ### v1.1.0
 - Event-aware review criteria with weighted scoring
 - Google Gemini provider support
 - Duplicate/similar submission detection
-- Confidence thresholds with configurable behavior
-- JSON response repair with AI-assisted retry
-- Configurable strictness levels and review focus
-- Custom persona support
+- Confidence thresholds and JSON repair
 
 ### v1.0.0
 - Initial release with OpenAI and Anthropic support
-- Basic submission analysis with fixed criteria
-- Auto-review on submission creation
+- Basic submission analysis with auto-review
 
 ## License
 

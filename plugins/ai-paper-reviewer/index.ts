@@ -16,7 +16,7 @@ import { AdminReviewHistory } from './components/admin-review-history';
 import { AdminPersonas } from './components/admin-personas';
 import { buildSystemPrompt } from './lib/prompts';
 import type { ReviewCriterion, SimilarSubmissionInfo, EventContext } from './lib/prompts';
-import { callProvider } from './lib/providers';
+import { callProvider, type TokenUsage } from './lib/providers';
 import { parseWithRetry } from './lib/json-repair';
 import { findSimilarSubmissions } from './lib/similarity';
 import type { SimilarSubmission } from './lib/similarity';
@@ -53,6 +53,12 @@ interface AiReviewerConfig {
   maxTokens?: number;
   /** Maximum input characters for submission text (default: 50000, max: 100000) */
   maxInputChars?: number;
+  /** Monthly budget limit in USD (0 = unlimited) */
+  budgetLimit?: number;
+  /** Budget alert threshold (percentage, 0-100) */
+  budgetAlertThreshold?: number;
+  /** Pause auto-reviews when budget exceeded */
+  pauseOnBudgetExceeded?: boolean;
 }
 
 // =============================================================================
@@ -78,6 +84,63 @@ const PROCESSING_LIMITS = {
 } as const;
 
 // =============================================================================
+// COST TRACKING
+// =============================================================================
+
+/**
+ * Pricing per 1M tokens (in USD) for various models.
+ * These are approximate prices as of early 2025.
+ * Users can check their provider dashboard for actual costs.
+ */
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  // OpenAI
+  'gpt-4o': { input: 2.50, output: 10.00 },
+  'gpt-4o-mini': { input: 0.15, output: 0.60 },
+  'gpt-4-turbo': { input: 10.00, output: 30.00 },
+  'gpt-4': { input: 30.00, output: 60.00 },
+  'gpt-3.5-turbo': { input: 0.50, output: 1.50 },
+  // Anthropic
+  'claude-opus-4-20250514': { input: 15.00, output: 75.00 },
+  'claude-sonnet-4-20250514': { input: 3.00, output: 15.00 },
+  'claude-3-5-sonnet-20241022': { input: 3.00, output: 15.00 },
+  'claude-3-opus-20240229': { input: 15.00, output: 75.00 },
+  'claude-3-sonnet-20240229': { input: 3.00, output: 15.00 },
+  'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
+  'claude-haiku-4-20250514': { input: 0.80, output: 4.00 },
+  // Gemini
+  'gemini-2.0-flash': { input: 0.10, output: 0.40 },
+  'gemini-2.5-pro': { input: 1.25, output: 5.00 },
+  'gemini-1.5-pro': { input: 1.25, output: 5.00 },
+  'gemini-1.5-flash': { input: 0.075, output: 0.30 },
+  'gemini-pro': { input: 0.50, output: 1.50 },
+};
+
+/** Default pricing for unknown models (conservative estimate) */
+const DEFAULT_PRICING = { input: 5.00, output: 15.00 };
+
+/**
+ * Calculate cost in USD from token usage and model
+ */
+function calculateCost(usage: TokenUsage, model: string): number {
+  const pricing = MODEL_PRICING[model] || DEFAULT_PRICING;
+  const inputCost = (usage.inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (usage.outputTokens / 1_000_000) * pricing.output;
+  return inputCost + outputCost;
+}
+
+/**
+ * Cost tracking data stored per billing period
+ */
+interface CostStats {
+  totalSpend: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  reviewCount: number;
+  periodStart: string;
+  lastUpdated: string;
+}
+
+// =============================================================================
 // ANALYSIS RESULT TYPE
 // =============================================================================
 
@@ -95,6 +158,9 @@ export interface AiAnalysisResult {
   parseAttempts: number;
   repairApplied: boolean;
   analyzedAt: string;
+  // Cost tracking (v1.14.0+)
+  usage?: TokenUsage;
+  costUsd?: number;
 }
 
 // =============================================================================
@@ -233,12 +299,13 @@ export function buildSubmissionText(submission: {
 /**
  * Call the AI provider API to analyze a submission.
  * Now uses the provider module, temperature, and parseWithRetry.
+ * Returns token usage and cost for tracking (v1.14.0+).
  */
 export async function callAiProvider(
   config: AiReviewerConfig,
   submissionText: string,
   systemPrompt?: string
-): Promise<{ result: AiAnalysisResult; rawResponse: string; inputTruncated: boolean }> {
+): Promise<{ result: AiAnalysisResult; rawResponse: string; inputTruncated: boolean; usage: TokenUsage; costUsd: number }> {
   const provider = config.aiProvider || 'openai';
   const model = config.model || 'gpt-4o';
 
@@ -260,7 +327,10 @@ export async function callAiProvider(
   const temperature = config.temperature ?? 0.3;
   const prompt = systemPrompt || buildSystemPrompt();
 
-  const rawResponse = await callProvider(provider, {
+  // Track total usage across main call and potential repair calls
+  let totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+  const providerResponse = await callProvider(provider, {
     apiKey: config.apiKey!,
     model,
     maxTokens,
@@ -269,9 +339,14 @@ export async function callAiProvider(
     userContent: processedText,
   });
 
+  const rawResponse = providerResponse.content;
+  totalUsage.inputTokens += providerResponse.usage.inputTokens;
+  totalUsage.outputTokens += providerResponse.usage.outputTokens;
+  totalUsage.totalTokens += providerResponse.usage.totalTokens;
+
   // Create a repair function that asks the AI to fix broken JSON
   const repairFn = async (broken: string): Promise<string> => {
-    return callProvider(provider, {
+    const repairResponse = await callProvider(provider, {
       apiKey: config.apiKey!,
       model,
       maxTokens,
@@ -279,6 +354,11 @@ export async function callAiProvider(
       systemPrompt: 'Fix this JSON so it is valid. Return ONLY the corrected JSON, nothing else.',
       userContent: broken,
     });
+    // Track repair call usage
+    totalUsage.inputTokens += repairResponse.usage.inputTokens;
+    totalUsage.outputTokens += repairResponse.usage.outputTokens;
+    totalUsage.totalTokens += repairResponse.usage.totalTokens;
+    return repairResponse.content;
   };
 
   const { data: parsed, parseAttempts, repairApplied } = await parseWithRetry<RawAiResponse>(
@@ -325,6 +405,9 @@ export async function callAiProvider(
     return typeof val === 'string' ? val.slice(0, 10000) : defaultVal; // Cap string length
   };
 
+  // Calculate cost based on usage and model
+  const costUsd = calculateCost(totalUsage, model);
+
   const result: AiAnalysisResult = {
     criteriaScores,
     overallScore: typeof parsed.overallScore === 'number' ? clamp(parsed.overallScore) : 3,
@@ -338,9 +421,11 @@ export async function callAiProvider(
     parseAttempts,
     repairApplied,
     analyzedAt: new Date().toISOString(),
+    usage: totalUsage,
+    costUsd,
   };
 
-  return { result, rawResponse, inputTruncated };
+  return { result, rawResponse, inputTruncated, usage: totalUsage, costUsd };
 }
 
 /** Raw shape the AI might return (flexible) */
@@ -748,6 +833,85 @@ const plugin: Plugin = {
         return { success: false, error: message };
       }
     },
+
+    'reset-budget': async (
+      ctx: PluginContext,
+      _params: Record<string, unknown>
+    ): Promise<{ success: boolean; previousSpend?: number; error?: string }> => {
+      try {
+        const existingStats = await ctx.data.get<CostStats>('costs', 'current-period');
+        const previousSpend = existingStats?.totalSpend ?? 0;
+
+        const now = new Date().toISOString();
+        const newStats: CostStats = {
+          totalSpend: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          reviewCount: 0,
+          periodStart: now,
+          lastUpdated: now,
+        };
+
+        await ctx.data.set('costs', 'current-period', newStats);
+
+        ctx.logger.info('Budget reset', { previousSpend });
+
+        return { success: true, previousSpend };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.logger.error('Failed to reset budget', { error: message });
+        return { success: false, error: message };
+      }
+    },
+
+    'get-cost-stats': async (
+      ctx: PluginContext,
+      _params: Record<string, unknown>
+    ): Promise<{
+      success: boolean;
+      stats?: CostStats & {
+        budgetLimit: number;
+        budgetRemaining: number;
+        budgetUsedPercent: number;
+        averageCostPerReview: number;
+      };
+      error?: string;
+    }> => {
+      try {
+        const config = ctx.config as AiReviewerConfig;
+        const budgetLimit = config.budgetLimit ?? 0;
+
+        const existingStats = await ctx.data.get<CostStats>('costs', 'current-period');
+
+        const stats: CostStats = existingStats ?? {
+          totalSpend: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          reviewCount: 0,
+          periodStart: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+        };
+
+        const budgetRemaining = budgetLimit > 0 ? Math.max(0, budgetLimit - stats.totalSpend) : -1;
+        const budgetUsedPercent = budgetLimit > 0 ? (stats.totalSpend / budgetLimit) * 100 : 0;
+        const averageCostPerReview = stats.reviewCount > 0 ? stats.totalSpend / stats.reviewCount : 0;
+
+        return {
+          success: true,
+          stats: {
+            ...stats,
+            budgetLimit,
+            budgetRemaining,
+            budgetUsedPercent,
+            averageCostPerReview,
+          },
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.logger.error('Failed to get cost stats', { error: message });
+        return { success: false, error: message };
+      }
+    },
   },
 };
 
@@ -879,6 +1043,27 @@ export async function handleAiReviewJob(
     return { success: false, error: 'API key not configured. Please add your API key in the plugin settings.' };
   }
 
+  // Check budget limit before proceeding (only if budget is set and pause is enabled)
+  const budgetLimit = config.budgetLimit ?? 0;
+  const pauseOnBudgetExceeded = config.pauseOnBudgetExceeded !== false; // default true
+
+  if (budgetLimit > 0 && pauseOnBudgetExceeded) {
+    const costStats = await ctx.data.get<CostStats>('costs', 'current-period');
+    const currentSpend = costStats?.totalSpend ?? 0;
+
+    if (currentSpend >= budgetLimit) {
+      ctx.logger.warn('AI review skipped - budget limit exceeded', {
+        submissionId,
+        currentSpend,
+        budgetLimit,
+      });
+      return {
+        success: false,
+        error: `Budget limit ($${budgetLimit.toFixed(2)}) exceeded. Current spend: $${currentSpend.toFixed(2)}. Reset budget from the dashboard to continue.`,
+      };
+    }
+  }
+
   try {
     // 1. Fetch event criteria if useEventCriteria is enabled
     let criteria: ReviewCriterion[] = [];
@@ -973,20 +1158,53 @@ export async function handleAiReviewJob(
     });
 
     // 5. Call AI with temperature and parse with retry
-    const { result, inputTruncated } = await callAiProvider(config, submissionText, systemPrompt);
+    const { result, inputTruncated, usage, costUsd } = await callAiProvider(config, submissionText, systemPrompt);
 
     // 6. Attach similar submissions to result
     if (similarSubmissions.length > 0) {
       result.similarSubmissions = similarSubmissions;
     }
 
-    ctx.logger.info('AI review completed', {
-      submissionId,
-      overallScore: result.overallScore,
-      recommendation: result.recommendation,
-      confidence: result.confidence,
-      inputTruncated,
-    });
+    // 7. Update cost tracking
+    try {
+      const now = new Date().toISOString();
+      const existingStats = await ctx.data.get<CostStats>('costs', 'current-period');
+
+      const updatedStats: CostStats = {
+        totalSpend: (existingStats?.totalSpend ?? 0) + costUsd,
+        totalInputTokens: (existingStats?.totalInputTokens ?? 0) + usage.inputTokens,
+        totalOutputTokens: (existingStats?.totalOutputTokens ?? 0) + usage.outputTokens,
+        reviewCount: (existingStats?.reviewCount ?? 0) + 1,
+        periodStart: existingStats?.periodStart ?? now,
+        lastUpdated: now,
+      };
+
+      await ctx.data.set('costs', 'current-period', updatedStats);
+
+      ctx.logger.info('AI review completed', {
+        submissionId,
+        overallScore: result.overallScore,
+        recommendation: result.recommendation,
+        confidence: result.confidence,
+        inputTruncated,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        costUsd: costUsd.toFixed(4),
+        totalSpend: updatedStats.totalSpend.toFixed(4),
+      });
+    } catch (costErr) {
+      // Log but don't fail the review if cost tracking fails
+      ctx.logger.warn('Failed to update cost tracking', {
+        error: costErr instanceof Error ? costErr.message : String(costErr),
+      });
+      ctx.logger.info('AI review completed', {
+        submissionId,
+        overallScore: result.overallScore,
+        recommendation: result.recommendation,
+        confidence: result.confidence,
+        inputTruncated,
+      });
+    }
 
     // Strip rawResponse before persisting to job results
     const { rawResponse: _raw, ...sanitizedAnalysis } = result;
@@ -1142,6 +1360,13 @@ export async function handleAiReviewJob(
         analyzedAt: result.analyzedAt,
         provider: config.aiProvider || 'openai',
         model: config.model || 'gpt-4o',
+        // Cost tracking data (v1.14.0+)
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.totalTokens,
+        },
+        costUsd,
       },
     };
   } catch (error) {

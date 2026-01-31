@@ -1,6 +1,6 @@
 # AI Paper Reviewer Plugin
 
-> **Current Version:** 1.13.0
+> **Current Version:** 1.14.0
 > **Plugin API Version:** 1.0
 > **Requires:** Plugin System v1.13.0+
 > **Status:** Production Ready
@@ -47,7 +47,7 @@ The AI Paper Reviewer plugin acts as an automated program committee member, prov
 
 ## Features
 
-### Current Features (v1.13.0)
+### Current Features (v1.14.0)
 
 - **Multi-provider support**: OpenAI, Anthropic (Claude), Google Gemini
 - **Dynamic model selection**: Fetches available models from your provider
@@ -62,6 +62,8 @@ The AI Paper Reviewer plugin acts as an automated program committee member, prov
 - **Auto-review**: Automatically review new submissions
 - **Review history**: View all AI reviews with filtering
 - **Admin dashboard**: Statistics, job status, and recent reviews
+- **Cost tracking**: Track token usage and estimated costs per review (v1.14.0+)
+- **Budget limits**: Set spending caps with automatic pause when exceeded (v1.14.0+)
 
 ### Privacy Features
 
@@ -113,6 +115,21 @@ The AI Paper Reviewer plugin acts as an automated program committee member, prov
 |---------|---------|-------------|
 | **Auto-Review** | Yes | Automatically review new submissions |
 | **Show AI on Team Page** | No | List AI reviewer publicly |
+
+### Cost & Budget Settings (v1.14.0+)
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Budget Limit (USD)** | 0 (unlimited) | Maximum monthly spend on AI reviews |
+| **Budget Alert Threshold** | 80% | Show warning when spending reaches this percentage |
+| **Pause When Exceeded** | Yes | Stop auto-reviews when budget limit is reached |
+
+The dashboard displays:
+- Total spend for the current period
+- Number of reviews and average cost per review
+- Token usage (input/output)
+- Budget progress bar (if limit is set)
+- Reset button to start a new billing period
 
 ### Quality Checks
 
@@ -354,6 +371,12 @@ The plugin creates a non-privileged service account to author reviews:
 ---
 
 ## Changelog
+
+### v1.14.0
+- Added cost tracking: token usage and estimated costs per review
+- Added budget management: set spending limits with automatic pause
+- Dashboard shows total spend, average cost per review, budget progress
+- Reset budget button to start new billing periods
 
 ### v1.13.0
 - Added speaker profile context (bio, experience, expertise, social profiles)

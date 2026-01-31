@@ -32,6 +32,12 @@ vi.mock('lucide-react', () => ({
   Play: () => <span data-testid="icon-play" />,
   PlayCircle: () => <span data-testid="icon-play-circle" />,
   FileText: () => <span data-testid="icon-file" />,
+  RotateCcw: () => <span data-testid="icon-rotate-ccw" />,
+  ChevronDown: () => <span data-testid="icon-chevron-down" />,
+  ChevronUp: () => <span data-testid="icon-chevron-up" />,
+  Trash2: () => <span data-testid="icon-trash" />,
+  DollarSign: () => <span data-testid="icon-dollar" />,
+  RotateCw: () => <span data-testid="icon-rotate-cw" />,
 }));
 
 // Mock plugin types

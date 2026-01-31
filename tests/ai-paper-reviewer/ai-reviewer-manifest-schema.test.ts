@@ -21,11 +21,12 @@ describe('Manifest configSchema extensions', () => {
       expect(schema['x-groups']).toBeDefined();
     });
 
-    it('has all five groups', () => {
+    it('has all six groups', () => {
       const groups = Object.keys(schema['x-groups']);
       expect(groups).toContain('provider');
       expect(groups).toContain('review');
       expect(groups).toContain('automation');
+      expect(groups).toContain('budget');
       expect(groups).toContain('detection');
       expect(groups).toContain('advanced');
     });
@@ -44,7 +45,7 @@ describe('Manifest configSchema extensions', () => {
     it('groups have sequential order values', () => {
       const orders = Object.values(schema['x-groups']).map((g) => g.order);
       const sorted = [...orders].sort((a, b) => a - b);
-      expect(sorted).toEqual([0, 1, 2, 3, 4]);
+      expect(sorted).toEqual([0, 1, 2, 3, 4, 5]);
     });
   });
 
@@ -61,6 +62,9 @@ describe('Manifest configSchema extensions', () => {
       useEventCriteria: 'review',
       autoReview: 'automation',
       showAiReviewerOnTeamPage: 'automation',
+      budgetLimit: 'budget',
+      budgetAlertThreshold: 'budget',
+      pauseOnBudgetExceeded: 'budget',
       enableDuplicateDetection: 'detection',
       duplicateThreshold: 'detection',
       temperature: 'advanced',
@@ -190,7 +194,7 @@ describe('Manifest configSchema extensions', () => {
   // -----------------------------------------------------------------------
 
   describe('x-display slider fields', () => {
-    const sliderFields = ['temperature', 'duplicateThreshold', 'confidenceThreshold'];
+    const sliderFields = ['temperature', 'duplicateThreshold', 'confidenceThreshold', 'budgetAlertThreshold'];
 
     it.each(sliderFields)('%s has x-display set to "slider"', (field) => {
       expect(properties[field]['x-display']).toBe('slider');
@@ -242,8 +246,8 @@ describe('Manifest configSchema extensions', () => {
   // -----------------------------------------------------------------------
 
   describe('version', () => {
-    it('manifest version is 1.13.0', () => {
-      expect(manifest.version).toBe('1.13.0');
+    it('manifest version is 1.14.0', () => {
+      expect(manifest.version).toBe('1.14.0');
     });
   });
 
@@ -315,8 +319,8 @@ describe('Manifest configSchema extensions', () => {
     });
 
     it('has expected number of properties', () => {
-      // provider (3) + review (2) + automation (2) + detection (2) + advanced (5) = 14
-      expect(Object.keys(properties).length).toBe(14);
+      // provider (3) + review (2) + automation (2) + budget (3) + detection (2) + advanced (5) = 17
+      expect(Object.keys(properties).length).toBe(17);
     });
 
     it('all properties have type and title', () => {

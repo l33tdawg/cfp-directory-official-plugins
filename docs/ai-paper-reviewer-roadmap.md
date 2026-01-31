@@ -1,7 +1,7 @@
 # AI Paper Reviewer - Development Roadmap
 
 > **Last Updated:** January 2026
-> **Current Version:** 1.13.0
+> **Current Version:** 1.14.0
 
 This document outlines the planned development roadmap for the AI Paper Reviewer plugin.
 
@@ -33,22 +33,17 @@ This document outlines the planned development roadmap for the AI Paper Reviewer
 
 ## Near-Term Roadmap
 
-### v1.14.0 - Cost Tracking & Transparency
+### v1.14.0 - Cost Tracking & Transparency ✅ RELEASED
 
-**Goal:** Help organizers understand and manage AI review costs.
+**Status:** Released January 2026
 
-| Feature | Description |
-|---------|-------------|
-| Token usage tracking | Track input/output tokens per review |
-| Cost estimation | Calculate estimated cost based on provider pricing |
-| Dashboard stats | Display total cost, average cost per review |
-| Per-event breakdown | Cost tracking by event |
-| Export cost reports | CSV export for budgeting |
-
-**Technical Notes:**
-- Store token counts in review metadata
-- Provider-specific pricing tables (user-configurable)
-- No external API calls required
+| Feature | Status |
+|---------|--------|
+| Token usage tracking | ✅ Implemented |
+| Cost estimation | ✅ Implemented |
+| Dashboard stats | ✅ Implemented |
+| Budget limits | ✅ Implemented |
+| Budget reset | ✅ Implemented |
 
 ---
 
@@ -163,6 +158,7 @@ This document outlines the planned development roadmap for the AI Paper Reviewer
 
 | Version | Release | Highlights |
 |---------|---------|------------|
+| 1.14.0 | Jan 2026 | Cost tracking, budget limits, token usage display |
 | 1.13.0 | Jan 2026 | Speaker context, co-speaker support, privacy improvements |
 | 1.12.0 | Jan 2026 | Security hardening |
 | 1.11.0 | Jan 2026 | Recent Reviews deduplication |

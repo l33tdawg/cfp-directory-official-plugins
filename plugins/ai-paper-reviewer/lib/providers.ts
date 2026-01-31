@@ -14,9 +14,26 @@ export interface ProviderOptions {
 }
 
 /**
+ * Token usage from AI provider response
+ */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+/**
+ * Response from AI provider including content and usage
+ */
+export interface ProviderResponse {
+  content: string;
+  usage: TokenUsage;
+}
+
+/**
  * Call OpenAI Chat Completions API
  */
-export async function callOpenAI(opts: ProviderOptions): Promise<string> {
+export async function callOpenAI(opts: ProviderOptions): Promise<ProviderResponse> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -40,13 +57,24 @@ export async function callOpenAI(opts: ProviderOptions): Promise<string> {
   }
 
   const data = await response.json();
-  return data.choices[0].message.content;
+  const content = data.choices[0].message.content;
+  const inputTokens = data.usage?.prompt_tokens || 0;
+  const outputTokens = data.usage?.completion_tokens || 0;
+
+  return {
+    content,
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+    },
+  };
 }
 
 /**
  * Call Anthropic Messages API
  */
-export async function callAnthropic(opts: ProviderOptions): Promise<string> {
+export async function callAnthropic(opts: ProviderOptions): Promise<ProviderResponse> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -69,7 +97,18 @@ export async function callAnthropic(opts: ProviderOptions): Promise<string> {
   }
 
   const data = await response.json();
-  return data.content[0].text;
+  const content = data.content[0].text;
+  const inputTokens = data.usage?.input_tokens || 0;
+  const outputTokens = data.usage?.output_tokens || 0;
+
+  return {
+    content,
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+    },
+  };
 }
 
 /**
@@ -77,7 +116,7 @@ export async function callAnthropic(opts: ProviderOptions): Promise<string> {
  * Security: Uses x-goog-api-key header instead of query parameter to prevent
  * API key exposure in logs, proxy caches, and browser history.
  */
-export async function callGemini(opts: ProviderOptions): Promise<string> {
+export async function callGemini(opts: ProviderOptions): Promise<ProviderResponse> {
   // Security: API key in header, not URL query string
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${opts.model}:generateContent`;
 
@@ -106,7 +145,18 @@ export async function callGemini(opts: ProviderOptions): Promise<string> {
   }
 
   const data = await response.json();
-  return data.candidates[0].content.parts[0].text;
+  const content = data.candidates[0].content.parts[0].text;
+  const inputTokens = data.usageMetadata?.promptTokenCount || 0;
+  const outputTokens = data.usageMetadata?.candidatesTokenCount || 0;
+
+  return {
+    content,
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+    },
+  };
 }
 
 /**
@@ -115,7 +165,7 @@ export async function callGemini(opts: ProviderOptions): Promise<string> {
 export async function callProvider(
   provider: string,
   opts: ProviderOptions
-): Promise<string> {
+): Promise<ProviderResponse> {
   switch (provider) {
     case 'openai':
       return callOpenAI(opts);

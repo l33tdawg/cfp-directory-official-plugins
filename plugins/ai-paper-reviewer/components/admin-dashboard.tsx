@@ -29,6 +29,8 @@ import {
   ChevronDown,
   ChevronUp,
   Trash2,
+  DollarSign,
+  RotateCw,
 } from 'lucide-react';
 import type { PluginComponentProps } from '@/lib/plugins';
 
@@ -43,6 +45,19 @@ interface ReviewStats {
   totalReviews: number;
   successRate: number;
   averageScore: number;
+}
+
+interface CostStats {
+  totalSpend: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  reviewCount: number;
+  periodStart: string;
+  lastUpdated: string;
+  budgetLimit: number;
+  budgetRemaining: number;
+  budgetUsedPercent: number;
+  averageCostPerReview: number;
 }
 
 interface AnalysisDetails {
@@ -251,6 +266,9 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [reReviewingAll, setReReviewingAll] = useState(false);
   const [clearingReviews, setClearingReviews] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [costStats, setCostStats] = useState<CostStats | null>(null);
+  const [resettingBudget, setResettingBudget] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // SECURITY: Never access context.config.apiKey on client - it should be redacted by host
   // Only rely on server-derived boolean from plugin data API
@@ -376,20 +394,33 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     setError(null);
 
     try {
-      // Fetch all job types, submissions, and config status in parallel
-      const [pendingRes, runningRes, completedRes, failedRes, submissionsRes, configRes] = await Promise.all([
+      // Fetch all job types, submissions, config status, and cost stats in parallel
+      const [pendingRes, runningRes, completedRes, failedRes, submissionsRes, configRes, costRes] = await Promise.all([
         fetch(`/api/plugins/${context.pluginId}/jobs?status=pending&type=ai-review&limit=100`),
         fetch(`/api/plugins/${context.pluginId}/jobs?status=running&type=ai-review&limit=100`),
         fetch(`/api/plugins/${context.pluginId}/jobs?status=completed&type=ai-review&limit=100`),
         fetch(`/api/plugins/${context.pluginId}/jobs?status=failed&type=ai-review&limit=100`),
         fetch(`/api/plugins/${context.pluginId}/submissions?limit=100`),
         fetch(`/api/plugins/${context.pluginId}/data/config/api-key-configured`),
+        fetch(`/api/plugins/${context.pluginId}/actions/get-cost-stats`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
       ]);
 
       // Check API key configuration status
       if (configRes.ok) {
         const configData = await configRes.json();
         setApiKeyConfigured(configData.value === true);
+      }
+
+      // Fetch cost stats
+      if (costRes.ok) {
+        const costData = await costRes.json();
+        if (costData.success && costData.stats) {
+          setCostStats(costData.stats);
+        }
       }
 
       const [pendingData, runningData, completedData, failedData, submissionsData] = await Promise.all([
@@ -740,6 +771,34 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     }
   };
 
+  // Reset budget spending counter
+  const resetBudget = async () => {
+    setResettingBudget(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/plugins/${context.pluginId}/actions/reset-budget`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to reset budget');
+      }
+
+      // Refresh data to reflect the reset
+      await fetchData();
+      setShowResetConfirm(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset budget');
+    } finally {
+      setResettingBudget(false);
+    }
+  };
+
   const _getRecommendationColor = (rec: string | null) => {
     if (!rec) return 'text-slate-500';
     if (rec.includes('ACCEPT')) return 'text-green-600 dark:text-green-400';
@@ -815,6 +874,57 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                   <>
                     <Trash2 className="h-4 w-4" />
                     Clear All Reviews
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Budget Confirmation Dialog */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 max-w-md mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/50 rounded-full">
+                <RotateCw className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Reset Budget Counter?
+              </h3>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              This will reset your spending counter to $0.00. Your actual API usage with your provider is not affected.
+              Use this to start a new billing period or after reviewing your costs.
+            </p>
+            {costStats && (
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                Current spend: <span className="font-medium">${costStats.totalSpend.toFixed(2)}</span>
+              </p>
+            )}
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                disabled={resettingBudget}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={resetBudget}
+                disabled={resettingBudget}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-md disabled:opacity-50 transition-colors"
+              >
+                {resettingBudget ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Resetting...
+                  </>
+                ) : (
+                  <>
+                    <RotateCw className="h-4 w-4" />
+                    Reset Budget
                   </>
                 )}
               </button>
@@ -1029,6 +1139,102 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
               </div>
             </div>
           </div>
+
+          {/* Cost & Budget Section */}
+          {costStats && (
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="cost-stats">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      Cost & Budget
+                    </h3>
+                  </div>
+                  {costStats.totalSpend > 0 && (
+                    <button
+                      onClick={() => setShowResetConfirm(true)}
+                      className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <RotateCw className="h-3 w-3" />
+                      Reset
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="p-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Total Spend</p>
+                    <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                      ${costStats.totalSpend.toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Reviews</p>
+                    <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                      {costStats.reviewCount}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Avg Cost/Review</p>
+                    <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                      ${costStats.averageCostPerReview.toFixed(4)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Total Tokens</p>
+                    <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                      {(costStats.totalInputTokens + costStats.totalOutputTokens).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Budget Progress Bar (only if budget is set) */}
+                {costStats.budgetLimit > 0 && (
+                  <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        Budget: ${costStats.totalSpend.toFixed(2)} / ${costStats.budgetLimit.toFixed(2)}
+                      </span>
+                      <span className={`text-xs font-medium ${
+                        costStats.budgetUsedPercent >= 100 ? 'text-red-600 dark:text-red-400' :
+                        costStats.budgetUsedPercent >= 80 ? 'text-amber-600 dark:text-amber-400' :
+                        'text-green-600 dark:text-green-400'
+                      }`}>
+                        {costStats.budgetUsedPercent.toFixed(1)}% used
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all ${
+                          costStats.budgetUsedPercent >= 100 ? 'bg-red-600' :
+                          costStats.budgetUsedPercent >= 80 ? 'bg-amber-500' :
+                          'bg-green-600'
+                        }`}
+                        style={{ width: `${Math.min(100, costStats.budgetUsedPercent)}%` }}
+                      />
+                    </div>
+                    {costStats.budgetUsedPercent >= 100 && (
+                      <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                        Budget exceeded. Auto-reviews are paused. Reset budget to continue.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Period Info */}
+                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
+                  Period started: {new Date(costStats.periodStart).toLocaleDateString()}
+                  {costStats.lastUpdated && (
+                    <span className="ml-4">
+                      Last updated: {new Date(costStats.lastUpdated).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Jobs in Progress - Active Jobs */}
           {activeJobs.length > 0 && (

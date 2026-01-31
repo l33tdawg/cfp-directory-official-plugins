@@ -151,6 +151,7 @@ function createFetchMock(overrides: Record<string, unknown> = {}) {
     failed: { jobs: [] },
     submissions: { submissions: [], stats: { total: 0, reviewed: 0, pending: 0, unreviewed: 0 } },
     configValue: { value: null },
+    costStats: { success: true, stats: null },
   };
 
   const data = { ...defaults, ...overrides };
@@ -192,6 +193,13 @@ function createFetchMock(overrides: Record<string, unknown> = {}) {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve(data.configValue),
+      } as Response);
+    }
+    // Cost stats action
+    if (urlStr.includes('/actions/get-cost-stats')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(data.costStats),
       } as Response);
     }
     // POST for job queue
@@ -268,7 +276,8 @@ describe('AdminDashboard', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('recent-activity')).toBeInTheDocument();
-        expect(screen.getByText('Recent Reviews')).toBeInTheDocument();
+        // Text includes count in parentheses, e.g., "Recent Reviews (0)"
+        expect(screen.getByText(/Recent Reviews/)).toBeInTheDocument();
       });
     });
   });
@@ -278,7 +287,12 @@ describe('AdminDashboard', () => {
   // ---------------------------------------------------------------------------
 
   describe('API Key Configuration Status', () => {
-    it('should show "API Configured" when apiKey is in context.config', async () => {
+    it('should show "API Configured" when server flag indicates key is set', async () => {
+      // Component relies on server-side flag, not context.config.apiKey (security)
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        createFetchMock({ configValue: { value: true } })
+      );
+
       render(<AdminDashboard context={mockContextWithApiKey} data={{}} />);
 
       await waitFor(() => {
@@ -490,15 +504,15 @@ describe('AdminDashboard', () => {
       });
     });
 
-    it('should show "Review All" button when API key is configured via context', async () => {
+    it('should show "Review All" button when server flag indicates key is set', async () => {
+      // Component relies on server-side flag, not context.config.apiKey (security)
       vi.spyOn(globalThis, 'fetch').mockImplementation(
         createFetchMock({
           submissions: mockSubmissionsResponse,
-          configValue: { value: null },
+          configValue: { value: true },
         })
       );
 
-      // When context.config.apiKey is set, hasApiKey is true
       render(<AdminDashboard context={mockContextWithApiKey} data={{}} />);
 
       await waitFor(() => {
@@ -572,15 +586,15 @@ describe('AdminDashboard', () => {
       });
     });
 
-    it('should enable Review button when API key is in context config', async () => {
+    it('should enable Review button when server flag indicates key is set', async () => {
+      // Component relies on server-side flag, not context.config.apiKey (security)
       vi.spyOn(globalThis, 'fetch').mockImplementation(
         createFetchMock({
           submissions: mockSubmissionsResponse,
-          configValue: { value: null },
+          configValue: { value: true },
         })
       );
 
-      // When context has API key, button should be enabled regardless of flag
       render(<AdminDashboard context={mockContextWithApiKey} data={{}} />);
 
       await waitFor(() => {
@@ -703,7 +717,8 @@ describe('AdminDashboard', () => {
 
       await waitFor(() => {
         const settingsLink = screen.getByRole('link', { name: /Settings/ });
-        expect(settingsLink).toHaveAttribute('href', '/admin/plugins/ai-paper-reviewer');
+        // Component uses context.pluginId for settings link
+        expect(settingsLink).toHaveAttribute('href', `/admin/plugins/${mockContext.pluginId}`);
       });
     });
 

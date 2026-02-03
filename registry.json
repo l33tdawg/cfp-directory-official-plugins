@@ -25,6 +25,56 @@
         "submission.created",
         "submission.updated"
       ],
+      "sidebarItems": [
+        {
+          "title": "AI Reviews",
+          "icon": "Bot",
+          "items": [
+            { "key": "dashboard", "label": "Dashboard", "path": "/", "icon": "LayoutDashboard" },
+            { "key": "history", "label": "Review History", "path": "/history", "icon": "History" },
+            { "key": "personas", "label": "Reviewer Personas", "path": "/personas", "icon": "Sparkles" }
+          ]
+        }
+      ],
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "aiProvider": {
+            "type": "string",
+            "title": "AI Provider",
+            "enum": ["openai", "anthropic", "gemini"],
+            "default": "openai"
+          },
+          "apiKey": {
+            "type": "string",
+            "title": "API Key",
+            "format": "password"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "default": "gpt-4o"
+          },
+          "autoReview": {
+            "type": "boolean",
+            "title": "Auto-Review New Submissions",
+            "default": true
+          },
+          "strictnessLevel": {
+            "type": "string",
+            "title": "Review Strictness",
+            "enum": ["lenient", "moderate", "strict"],
+            "default": "moderate"
+          },
+          "budgetLimit": {
+            "type": "number",
+            "title": "Monthly Budget Limit (USD)",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "required": ["apiKey"]
+      },
       "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/ai-paper-reviewer-v1.14.1/ai-paper-reviewer-v1.14.1.zip",
       "sha256": "4f8f22b30a9d2ae310521bf652434b7db8e1043e5aa06872d46ba8993e86df18"
     },

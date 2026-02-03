@@ -38,6 +38,15 @@ vi.mock('lucide-react', () => ({
   Trash2: () => <span data-testid="icon-trash" />,
   DollarSign: () => <span data-testid="icon-dollar" />,
   RotateCw: () => <span data-testid="icon-rotate-cw" />,
+  // Icons for AdminOnboarding component
+  Cpu: () => <span data-testid="icon-cpu" />,
+  Zap: () => <span data-testid="icon-zap" />,
+  BookOpen: () => <span data-testid="icon-book" />,
+  Lightbulb: () => <span data-testid="icon-lightbulb" />,
+  Scale: () => <span data-testid="icon-scale" />,
+  ArrowRight: () => <span data-testid="icon-arrow-right" />,
+  ArrowLeft: () => <span data-testid="icon-arrow-left" />,
+  Check: () => <span data-testid="icon-check-simple" />,
 }));
 
 // Mock plugin types
@@ -161,7 +170,7 @@ function createFetchMock(overrides: Record<string, unknown> = {}) {
     completed: { jobs: [] },
     failed: { jobs: [] },
     submissions: { submissions: [], stats: { total: 0, reviewed: 0, pending: 0, unreviewed: 0 } },
-    configValue: { value: null },
+    configValue: { value: true }, // Default to API key configured so dashboard shows
     costStats: { success: true, stats: null },
   };
 
@@ -325,7 +334,7 @@ describe('AdminDashboard', () => {
       });
     });
 
-    it('should show "API Key Not Configured" when flag is explicitly false', async () => {
+    it('should show onboarding wizard when flag is explicitly false', async () => {
       vi.spyOn(globalThis, 'fetch').mockImplementation(
         createFetchMock({ configValue: { value: false } })
       );
@@ -333,16 +342,15 @@ describe('AdminDashboard', () => {
       render(<AdminDashboard context={mockContext} data={{}} />);
 
       await waitFor(() => {
-        expect(screen.getByText('API Key Not Configured')).toBeInTheDocument();
-        expect(
-          screen.getByText('Configure your API key in the plugin settings to enable reviews')
-        ).toBeInTheDocument();
+        // When API key is not configured, onboarding wizard is shown
+        expect(screen.getByTestId('admin-onboarding')).toBeInTheDocument();
+        expect(screen.getByText('AI Paper Reviewer Setup')).toBeInTheDocument();
       });
     });
 
-    it('should show "not configured" when config flag returns null value', async () => {
+    it('should show onboarding wizard when config flag returns null value', async () => {
       // When configRes returns { value: null }, apiKeyConfigured becomes false
-      // (because null === true is false), so it shows "API Key Not Configured"
+      // (because null === true is false), so it shows the onboarding wizard
       vi.spyOn(globalThis, 'fetch').mockImplementation(
         createFetchMock({ configValue: { value: null } })
       );
@@ -350,8 +358,8 @@ describe('AdminDashboard', () => {
       render(<AdminDashboard context={mockContext} data={{}} />);
 
       await waitFor(() => {
-        // When the flag is not explicitly true, it shows not configured
-        expect(screen.getByText('API Key Not Configured')).toBeInTheDocument();
+        // When the flag is not explicitly true, shows onboarding
+        expect(screen.getByTestId('admin-onboarding')).toBeInTheDocument();
       });
     });
 
@@ -531,7 +539,7 @@ describe('AdminDashboard', () => {
       });
     });
 
-    it('should not show "Review All" button when API key is explicitly not configured', async () => {
+    it('should show onboarding wizard (not review queue) when API key is explicitly not configured', async () => {
       vi.spyOn(globalThis, 'fetch').mockImplementation(
         createFetchMock({
           submissions: mockSubmissionsResponse,
@@ -542,9 +550,12 @@ describe('AdminDashboard', () => {
       render(<AdminDashboard context={mockContext} data={{}} />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('review-queue')).toBeInTheDocument();
+        // When API key is not configured, onboarding is shown instead of dashboard
+        expect(screen.getByTestId('admin-onboarding')).toBeInTheDocument();
       });
 
+      // Dashboard elements shouldn't be visible
+      expect(screen.queryByTestId('review-queue')).not.toBeInTheDocument();
       expect(screen.queryByText(/Review All/)).not.toBeInTheDocument();
     });
   });
@@ -581,7 +592,7 @@ describe('AdminDashboard', () => {
       );
     });
 
-    it('should disable Review button when API key is known to be missing', async () => {
+    it('should show onboarding (not review buttons) when API key is known to be missing', async () => {
       vi.spyOn(globalThis, 'fetch').mockImplementation(
         createFetchMock({
           submissions: mockSubmissionsResponse,
@@ -592,9 +603,12 @@ describe('AdminDashboard', () => {
       render(<AdminDashboard context={mockContext} data={{}} />);
 
       await waitFor(() => {
-        const reviewButton = screen.getByRole('button', { name: /Review$/ });
-        expect(reviewButton).toBeDisabled();
+        // Onboarding is shown instead of dashboard when API key is not configured
+        expect(screen.getByTestId('admin-onboarding')).toBeInTheDocument();
       });
+
+      // Dashboard review button is not visible
+      expect(screen.queryByRole('button', { name: /^Review$/ })).not.toBeInTheDocument();
     });
 
     it('should enable Review button when server flag indicates key is set', async () => {
@@ -614,7 +628,7 @@ describe('AdminDashboard', () => {
       });
     });
 
-    it('should not show Review All button when API key is not configured', async () => {
+    it('should show onboarding (not Review All button) when API key is not configured', async () => {
       vi.spyOn(globalThis, 'fetch').mockImplementation(
         createFetchMock({
           submissions: mockSubmissionsResponse,
@@ -625,12 +639,12 @@ describe('AdminDashboard', () => {
       // Render with context that doesn't have apiKey
       render(<AdminDashboard context={mockContext} data={{}} />);
 
-      // Wait for the config status to update
+      // Wait for the onboarding to show
       await waitFor(() => {
-        expect(screen.getByText('API Key Not Configured')).toBeInTheDocument();
+        expect(screen.getByTestId('admin-onboarding')).toBeInTheDocument();
       });
 
-      // Review All button should not be visible when API key is not configured
+      // Dashboard elements should not be visible when onboarding is shown
       expect(screen.queryByText(/Review All/)).not.toBeInTheDocument();
     });
   });

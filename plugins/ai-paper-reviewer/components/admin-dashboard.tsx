@@ -33,6 +33,7 @@ import {
   RotateCw,
 } from 'lucide-react';
 import type { PluginComponentProps } from '@/lib/plugins';
+import { AdminOnboarding } from './admin-onboarding';
 
 interface JobStats {
   pending: number;
@@ -937,6 +938,17 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-purple-600 dark:text-purple-400" />
         </div>
+      ) : apiKeyStatusKnown && !hasApiKey ? (
+        /* Show onboarding wizard when API key is not configured */
+        <AdminOnboarding
+          context={context}
+          data={data}
+          onComplete={() => {
+            // Refresh data after onboarding completes
+            setApiKeyConfigured(true);
+            fetchData();
+          }}
+        />
       ) : (
         <>
           {/* Configuration Status */}
@@ -944,9 +956,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
             className={`p-4 rounded-lg border ${
               hasApiKey
                 ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800'
-                : apiKeyStatusKnown
-                  ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
-                  : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700'
+                : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700'
             }`}
             data-testid="config-status"
           >
@@ -960,18 +970,6 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                     </p>
                     <p className="text-xs text-green-600 dark:text-green-400">
                       Using {provider} / {model}
-                    </p>
-                  </div>
-                </>
-              ) : apiKeyStatusKnown ? (
-                <>
-                  <Key className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                  <div>
-                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                      API Key Not Configured
-                    </p>
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                      Configure your API key in the plugin settings to enable reviews
                     </p>
                   </div>
                 </>

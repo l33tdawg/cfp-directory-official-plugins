@@ -282,10 +282,10 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const fetchActiveJobs = useCallback(async () => {
     try {
       const [pendingRes, runningRes, completedRes, failedRes] = await Promise.all([
-        fetch(`/api/plugins/${context.pluginId}/jobs?status=pending&type=ai-review&limit=100`),
-        fetch(`/api/plugins/${context.pluginId}/jobs?status=running&type=ai-review&limit=100`),
-        fetch(`/api/plugins/${context.pluginId}/jobs?status=completed&type=ai-review&limit=100`),
-        fetch(`/api/plugins/${context.pluginId}/jobs?status=failed&type=ai-review&limit=100`),
+        context.api.fetch('/jobs?status=pending&type=ai-review&limit=100'),
+        context.api.fetch('/jobs?status=running&type=ai-review&limit=100'),
+        context.api.fetch('/jobs?status=completed&type=ai-review&limit=100'),
+        context.api.fetch('/jobs?status=failed&type=ai-review&limit=100'),
       ]);
 
       const [pendingData, runningData, completedData, failedData] = await Promise.all([
@@ -358,13 +358,13 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     } catch {
       // Silently fail - the full refresh will catch errors
     }
-  }, [context.pluginId]);
+  }, [context.api]);
 
   // Silent data refresh without showing loading spinner (for after actions)
   const refreshDataSilent = useCallback(async () => {
     try {
       const [submissionsRes] = await Promise.all([
-        fetch(`/api/plugins/${context.pluginId}/submissions?limit=100`),
+        context.api.fetch('/submissions?limit=100'),
       ]);
 
       const submissionsData = submissionsRes.ok
@@ -387,7 +387,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     } catch {
       // Silently fail
     }
-  }, [context.pluginId, fetchActiveJobs]);
+  }, [context.api, fetchActiveJobs]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -396,13 +396,13 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     try {
       // Fetch all job types, submissions, config status, and cost stats in parallel
       const [pendingRes, runningRes, completedRes, failedRes, submissionsRes, configRes, costRes] = await Promise.all([
-        fetch(`/api/plugins/${context.pluginId}/jobs?status=pending&type=ai-review&limit=100`),
-        fetch(`/api/plugins/${context.pluginId}/jobs?status=running&type=ai-review&limit=100`),
-        fetch(`/api/plugins/${context.pluginId}/jobs?status=completed&type=ai-review&limit=100`),
-        fetch(`/api/plugins/${context.pluginId}/jobs?status=failed&type=ai-review&limit=100`),
-        fetch(`/api/plugins/${context.pluginId}/submissions?limit=100`),
-        fetch(`/api/plugins/${context.pluginId}/data/config/api-key-configured`),
-        fetch(`/api/plugins/${context.pluginId}/actions/get-cost-stats`, {
+        context.api.fetch('/jobs?status=pending&type=ai-review&limit=100'),
+        context.api.fetch('/jobs?status=running&type=ai-review&limit=100'),
+        context.api.fetch('/jobs?status=completed&type=ai-review&limit=100'),
+        context.api.fetch('/jobs?status=failed&type=ai-review&limit=100'),
+        context.api.fetch('/submissions?limit=100'),
+        context.api.fetch('/data/config/api-key-configured'),
+        context.api.fetch('/actions/get-cost-stats', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
@@ -561,7 +561,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     } finally {
       setLoading(false);
     }
-  }, [context.pluginId]);
+  }, [context.api]);
 
   useEffect(() => {
     fetchData();
@@ -581,7 +581,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     setQueueingIds((prev) => new Set(prev).add(submission.id));
 
     try {
-      const response = await fetch(`/api/plugins/${context.pluginId}/jobs`, {
+      const response = await context.api.fetch('/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -625,7 +625,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     try {
       // Queue all unreviewed submissions
       for (const submission of unreviewedSubmissions) {
-        await fetch(`/api/plugins/${context.pluginId}/jobs`, {
+        await context.api.fetch('/jobs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -656,7 +656,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     setReReviewingIds((prev) => new Set(prev).add(review.id));
 
     try {
-      const response = await fetch(`/api/plugins/${context.pluginId}/jobs`, {
+      const response = await context.api.fetch('/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -718,7 +718,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
 
     try {
       for (const review of reviewsWithSubmissions) {
-        await fetch(`/api/plugins/${context.pluginId}/jobs`, {
+        await context.api.fetch('/jobs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -749,7 +749,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     setError(null);
 
     try {
-      const response = await fetch(`/api/plugins/${context.pluginId}/actions/clear-reviews`, {
+      const response = await context.api.fetch('/actions/clear-reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -777,7 +777,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     setError(null);
 
     try {
-      const response = await fetch(`/api/plugins/${context.pluginId}/actions/reset-budget`, {
+      const response = await context.api.fetch('/actions/reset-budget', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),

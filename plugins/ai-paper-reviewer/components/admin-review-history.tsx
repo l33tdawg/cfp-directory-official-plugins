@@ -312,8 +312,8 @@ export function AdminReviewHistory({ context }: PluginComponentProps) {
     try {
       // Fetch completed and failed jobs
       const [completedRes, failedRes] = await Promise.all([
-        fetch(`/api/plugins/${context.pluginId}/jobs?status=completed&type=ai-review&limit=100`),
-        fetch(`/api/plugins/${context.pluginId}/jobs?status=failed&type=ai-review&limit=100`),
+        context.api.fetch('/jobs?status=completed&type=ai-review&limit=100'),
+        context.api.fetch('/jobs?status=failed&type=ai-review&limit=100'),
       ]);
 
       if (!completedRes.ok || !failedRes.ok) {
@@ -337,7 +337,7 @@ export function AdminReviewHistory({ context }: PluginComponentProps) {
     } finally {
       setLoading(false);
     }
-  }, [context.pluginId]);
+  }, [context.api]);
 
   useEffect(() => {
     fetchJobs();
@@ -348,7 +348,7 @@ export function AdminReviewHistory({ context }: PluginComponentProps) {
     setError(null);
     try {
       // Delete all completed and failed jobs for this plugin
-      const response = await fetch(`/api/plugins/${context.pluginId}/jobs/clear`, {
+      const response = await context.api.fetch('/jobs/clear', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statuses: ['completed', 'failed'], type: 'ai-review' }),
@@ -368,7 +368,7 @@ export function AdminReviewHistory({ context }: PluginComponentProps) {
     } finally {
       setClearing(false);
     }
-  }, [context.pluginId]);
+  }, [context.api]);
 
   const filteredJobs = useMemo(() => {
     if (filter === 'all') return jobs;

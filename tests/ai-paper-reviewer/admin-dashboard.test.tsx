@@ -50,20 +50,31 @@ import type { ClientPluginContext } from '@/lib/plugins';
 // Test Data
 // =============================================================================
 
+// Create mock API helper that delegates to global fetch
+const createMockApi = (pluginId: string) => ({
+  baseUrl: `/api/plugins/${pluginId}`,
+  fetch: async (path: string, options?: RequestInit) => {
+    return fetch(`/api/plugins/${pluginId}${path}`, options);
+  },
+});
+
 const mockContext: ClientPluginContext = {
   pluginName: 'ai-paper-reviewer',
   pluginId: 'plugin-123',
   config: {},
+  api: createMockApi('plugin-123'),
 };
 
 const mockContextWithApiKey: ClientPluginContext = {
   ...mockContext,
   config: { apiKey: 'sk-test-key', aiProvider: 'openai', model: 'gpt-4o' },
+  api: createMockApi('plugin-123'),
 };
 
 const mockContextGemini: ClientPluginContext = {
   ...mockContext,
   config: { aiProvider: 'gemini', model: 'gemini-2.0-flash' },
+  api: createMockApi('plugin-123'),
 };
 
 const mockCompletedJob = {

@@ -109,9 +109,17 @@ export function AdminPersonas({ context }: PluginComponentProps) {
         customPersona: persona,
       };
 
-      const response = await fetch(`/api/admin/plugins/${context.pluginId}`, {
+      // Platform-agnostic config URL:
+      // - Main platform (has organizationId): /api/organizations/{orgId}/plugins/{pluginId}
+      // - Self-hosted (no organizationId): /api/admin/plugins/{pluginId}
+      const configUrl = 'organizationId' in context && context.organizationId
+        ? `/api/organizations/${context.organizationId}/plugins/${context.pluginId}`
+        : `/api/admin/plugins/${context.pluginId}`;
+
+      const response = await fetch(configUrl, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           config: updatedConfig,
         }),

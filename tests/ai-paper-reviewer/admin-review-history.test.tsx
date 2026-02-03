@@ -34,6 +34,13 @@ const mockContext: ClientPluginContext = {
   pluginName: 'ai-paper-reviewer',
   pluginId: 'plugin-123',
   config: {},
+  api: {
+    baseUrl: '/api/plugins/plugin-123',
+    fetch: async (path: string, options?: RequestInit) => {
+      // Delegate to global fetch with baseUrl prepended
+      return fetch(`/api/plugins/plugin-123${path}`, options);
+    },
+  },
 };
 
 const mockCompletedJob = {

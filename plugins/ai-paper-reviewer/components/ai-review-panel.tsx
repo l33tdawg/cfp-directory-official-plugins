@@ -227,8 +227,8 @@ export function AiReviewPanel({ context, data }: PluginComponentProps) {
     async function loadReview() {
       try {
         // Fetch completed jobs for this plugin and submission
-        const completedRes = await fetch(
-          `/api/plugins/${context.pluginId}/jobs?status=completed&submissionId=${submissionId}&limit=10`
+        const completedRes = await context.api.fetch(
+          `/jobs?status=completed&submissionId=${submissionId}&limit=10`
         );
 
         if (cancelled) return;
@@ -252,11 +252,11 @@ export function AiReviewPanel({ context, data }: PluginComponentProps) {
         }
 
         // Check for pending/running jobs
-        const pendingRes = await fetch(
-          `/api/plugins/${context.pluginId}/jobs?status=pending&submissionId=${submissionId}&limit=10`
+        const pendingRes = await context.api.fetch(
+          `/jobs?status=pending&submissionId=${submissionId}&limit=10`
         );
-        const runningRes = await fetch(
-          `/api/plugins/${context.pluginId}/jobs?status=running&submissionId=${submissionId}&limit=10`
+        const runningRes = await context.api.fetch(
+          `/jobs?status=running&submissionId=${submissionId}&limit=10`
         );
 
         if (cancelled) return;
@@ -291,7 +291,7 @@ export function AiReviewPanel({ context, data }: PluginComponentProps) {
     return () => {
       cancelled = true;
     };
-  }, [submissionId, context.pluginId]);
+  }, [submissionId, context.api]);
 
   if (!submissionId) return null;
 

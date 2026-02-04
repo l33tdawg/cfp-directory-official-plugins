@@ -11,6 +11,8 @@ export interface ProviderOptions {
   temperature: number;
   systemPrompt: string;
   userContent: string;
+  /** Enable web search/grounding for providers that support it (Gemini) */
+  enableWebSearch?: boolean;
 }
 
 /**
@@ -115,10 +117,35 @@ export async function callAnthropic(opts: ProviderOptions): Promise<ProviderResp
  * Call Google Gemini API
  * Security: Uses x-goog-api-key header instead of query parameter to prevent
  * API key exposure in logs, proxy caches, and browser history.
+ *
+ * Supports Google Search grounding for fact-checking recent events and claims.
  */
 export async function callGemini(opts: ProviderOptions): Promise<ProviderResponse> {
   // Security: API key in header, not URL query string
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${opts.model}:generateContent`;
+
+  // Build request body
+  const requestBody: Record<string, unknown> = {
+    contents: [
+      {
+        parts: [{ text: `${opts.systemPrompt}\n\n${opts.userContent}` }],
+      },
+    ],
+    generationConfig: {
+      maxOutputTokens: opts.maxTokens,
+      temperature: opts.temperature,
+    },
+  };
+
+  // Enable Google Search grounding for fact-checking
+  // This allows Gemini to search the web for recent events, verify claims, etc.
+  if (opts.enableWebSearch) {
+    requestBody.tools = [
+      {
+        google_search: {},
+      },
+    ];
+  }
 
   const response = await fetch(url, {
     method: 'POST',
@@ -126,17 +153,7 @@ export async function callGemini(opts: ProviderOptions): Promise<ProviderRespons
       'Content-Type': 'application/json',
       'x-goog-api-key': opts.apiKey,
     },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [{ text: `${opts.systemPrompt}\n\n${opts.userContent}` }],
-        },
-      ],
-      generationConfig: {
-        maxOutputTokens: opts.maxTokens,
-        temperature: opts.temperature,
-      },
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {

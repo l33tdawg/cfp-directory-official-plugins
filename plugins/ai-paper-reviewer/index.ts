@@ -59,6 +59,8 @@ interface AiReviewerConfig {
   budgetAlertThreshold?: number;
   /** Pause auto-reviews when budget exceeded */
   pauseOnBudgetExceeded?: boolean;
+  /** Enable web search/grounding for fact-checking (Gemini only) */
+  enableWebSearch?: boolean;
 }
 
 // =============================================================================
@@ -330,6 +332,9 @@ export async function callAiProvider(
   // Track total usage across main call and potential repair calls
   let totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
+  // Enable web search for Gemini if configured (allows fact-checking recent events)
+  const enableWebSearch = provider === 'gemini' && config.enableWebSearch === true;
+
   const providerResponse = await callProvider(provider, {
     apiKey: config.apiKey!,
     model,
@@ -337,6 +342,7 @@ export async function callAiProvider(
     temperature,
     systemPrompt: prompt,
     userContent: processedText,
+    enableWebSearch,
   });
 
   const rawResponse = providerResponse.content;

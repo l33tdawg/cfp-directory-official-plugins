@@ -9,9 +9,9 @@
     {
       "name": "ai-paper-reviewer",
       "displayName": "AI Paper Reviewer",
-      "version": "1.24.0",
+      "version": "1.25.0",
       "apiVersion": "1.0",
-      "description": "Intelligent submission analysis with cost tracking, budget management, speaker context, and criteria-based scoring",
+      "description": "Intelligent submission analysis with cost tracking, budget management, speaker context, criteria-based scoring, and Google Search grounding for fact-checking",
       "author": "CFP Directory",
       "homepage": "https://github.com/l33tdawg/cfp-directory-official-plugins/tree/main/plugins/ai-paper-reviewer",
       "permissions": [
@@ -42,8 +42,8 @@
           "aiProvider": {
             "type": "string",
             "title": "AI Provider",
-            "enum": ["openai", "anthropic", "gemini"],
-            "default": "openai"
+            "enum": ["gemini", "openai", "anthropic"],
+            "default": "gemini"
           },
           "apiKey": {
             "type": "string",
@@ -53,7 +53,7 @@
           "model": {
             "type": "string",
             "title": "Model",
-            "default": "gpt-4o"
+            "default": "gemini-2.0-flash"
           },
           "autoReview": {
             "type": "boolean",
@@ -75,8 +75,8 @@
         },
         "required": ["apiKey"]
       },
-      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/v1.24.0/ai-paper-reviewer.zip",
-      "sha256": "43f45c7585a222061a4ce96c736944ac0bf43028c32908cf9d1a3e9aaccd255d"
+      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/v1.25.0/ai-paper-reviewer.zip",
+      "sha256": "b39c39c1238e419ef606644bd53408d10557411a70f585fcad96b36ba1319181"
     },
     {
       "name": "example-webhook",

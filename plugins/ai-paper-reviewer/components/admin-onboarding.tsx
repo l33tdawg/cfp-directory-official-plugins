@@ -54,7 +54,14 @@ interface PersonaPreset {
 // Constants
 // =============================================================================
 
-const PROVIDERS: { id: Provider; name: string; description: string; icon: React.ReactNode }[] = [
+const PROVIDERS: { id: Provider; name: string; description: string; badge?: string; icon: React.ReactNode }[] = [
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    description: 'Includes Google Search for fact-checking recent events and claims',
+    badge: 'Recommended',
+    icon: <Zap className="h-6 w-6" />,
+  },
   {
     id: 'openai',
     name: 'OpenAI',
@@ -66,12 +73,6 @@ const PROVIDERS: { id: Provider; name: string; description: string; icon: React.
     name: 'Anthropic',
     description: 'Claude Sonnet and Haiku models',
     icon: <Cpu className="h-6 w-6" />,
-  },
-  {
-    id: 'gemini',
-    name: 'Google Gemini',
-    description: 'Gemini 2.0 Flash and Pro models',
-    icon: <Zap className="h-6 w-6" />,
   },
 ];
 
@@ -177,8 +178,15 @@ function ProviderStep({
               >
                 {provider.icon}
               </div>
-              <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white">{provider.name}</h3>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-slate-900 dark:text-white">{provider.name}</h3>
+                  {provider.badge && (
+                    <span className="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full">
+                      {provider.badge}
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">{provider.description}</p>
               </div>
             </div>

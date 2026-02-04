@@ -1,9 +1,9 @@
 {
   "name": "ai-paper-reviewer",
   "displayName": "AI Paper Reviewer",
-  "version": "1.24.0",
+  "version": "1.25.0",
   "apiVersion": "1.0",
-  "description": "Intelligent submission analysis with cost tracking, budget management, speaker context, and criteria-based scoring",
+  "description": "Intelligent submission analysis with cost tracking, budget management, speaker context, criteria-based scoring, and Google Search grounding for fact-checking",
   "author": "CFP Directory",
   "homepage": "https://github.com/l33tdawg/cfp-directory-official-plugins/tree/main/plugins/ai-paper-reviewer",
   "permissions": [
@@ -85,10 +85,15 @@
         "type": "string",
         "title": "AI Provider",
         "description": "Select your AI provider",
-        "enum": ["openai", "anthropic", "gemini"],
-        "default": "openai",
+        "enum": ["gemini", "openai", "anthropic"],
+        "default": "gemini",
         "x-group": "provider",
-        "x-friendly-hint": "All three providers produce high-quality reviews. Choose based on your existing subscriptions."
+        "x-enum-labels": {
+          "gemini": "Google Gemini (Recommended)",
+          "openai": "OpenAI",
+          "anthropic": "Anthropic Claude"
+        },
+        "x-friendly-hint": "Gemini is recommended as it includes Google Search grounding for fact-checking recent events and claims at no extra cost. OpenAI and Anthropic produce excellent reviews but cannot verify facts against current information."
       },
       "apiKey": {
         "type": "string",
@@ -98,11 +103,21 @@
         "x-group": "provider",
         "x-friendly-hint": "Get this from your provider's dashboard (OpenAI, Anthropic, or Google Cloud). Stored securely and never shared."
       },
+      "enableWebSearch": {
+        "type": "boolean",
+        "title": "Enable Web Search (Grounding)",
+        "description": "Allow AI to search the web for fact-checking",
+        "default": true,
+        "x-group": "provider",
+        "x-depends-on": ["aiProvider"],
+        "x-visible-when": { "aiProvider": "gemini" },
+        "x-friendly-hint": "When enabled, Gemini can verify claims about recent events, security vulnerabilities, tools, and more using Google Search. Highly recommended for security/tech conferences."
+      },
       "model": {
         "type": "string",
         "title": "Model",
         "description": "AI model for generating reviews",
-        "default": "gpt-4o",
+        "default": "gemini-2.0-flash",
         "x-group": "provider",
         "x-depends-on": ["aiProvider", "apiKey"],
         "x-friendly-hint": "Available models load from your provider. Recommended models are marked.",
@@ -115,6 +130,11 @@
           "errorBehavior": "show-error-with-fallback"
         },
         "x-options": {
+          "gemini": [
+            { "value": "gemini-2.0-flash", "label": "Gemini 2.0 Flash (Recommended)", "description": "Fast, capable, with Google Search grounding" },
+            { "value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro", "description": "Most capable, with Google Search grounding" },
+            { "value": "gemini-1.5-pro", "label": "Gemini 1.5 Pro", "description": "Previous generation, still excellent" }
+          ],
           "openai": [
             { "value": "gpt-4o", "label": "GPT-4o (Recommended)", "description": "Best quality and speed" },
             { "value": "gpt-4o-mini", "label": "GPT-4o Mini", "description": "Faster, lower cost" }
@@ -122,10 +142,6 @@
           "anthropic": [
             { "value": "claude-sonnet-4-20250514", "label": "Claude Sonnet 4 (Recommended)", "description": "Excellent quality" },
             { "value": "claude-haiku-4-20250514", "label": "Claude Haiku 4", "description": "Faster, lower cost" }
-          ],
-          "gemini": [
-            { "value": "gemini-2.0-flash", "label": "Gemini 2.0 Flash (Recommended)", "description": "Fast and capable" },
-            { "value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro", "description": "Most capable" }
           ]
         }
       },

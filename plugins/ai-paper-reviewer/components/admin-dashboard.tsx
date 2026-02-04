@@ -28,6 +28,8 @@ import {
   RotateCcw,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Trash2,
   DollarSign,
   RotateCw,
@@ -254,7 +256,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     averageScore: 0,
   });
   const [recentReviews, setRecentReviews] = useState<RecentReview[]>([]);
-  const [unreviewedSubmissions, setUnreviewedSubmissions] = useState<UnreviewedSubmission[]>([]);
+  const [_unreviewedSubmissions, setUnreviewedSubmissions] = useState<UnreviewedSubmission[]>([]);
   const [submissionStats, setSubmissionStats] = useState<SubmissionStats>({
     total: 0,
     reviewed: 0,
@@ -273,6 +275,11 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [costStats, setCostStats] = useState<CostStats | null>(null);
   const [resettingBudget, setResettingBudget] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  // Pagination for review queue
+  const [allUnreviewedSubmissions, setAllUnreviewedSubmissions] = useState<UnreviewedSubmission[]>([]);
+  const [queuePage, setQueuePage] = useState(1);
+  const QUEUE_PAGE_SIZE = 10;
 
   // SECURITY: Never access context.config.apiKey on client - it should be redacted by host
   // Only rely on server-derived boolean from plugin data API
@@ -380,7 +387,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         const unreviewed = submissionsData.submissions.filter(
           (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || !s.aiReview
         );
-        setUnreviewedSubmissions(unreviewed.slice(0, 10));
+        setAllUnreviewedSubmissions(unreviewed);
+        setUnreviewedSubmissions(unreviewed.slice(0, QUEUE_PAGE_SIZE));
 
         // Get reviewed submissions for re-review capability
         setSubmissionStats(submissionsData.stats);
@@ -555,7 +563,9 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         const unreviewed = submissionsData.submissions.filter(
           (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || !s.aiReview
         );
-        setUnreviewedSubmissions(unreviewed.slice(0, 10)); // Show first 10
+        setAllUnreviewedSubmissions(unreviewed);
+        setUnreviewedSubmissions(unreviewed.slice(0, QUEUE_PAGE_SIZE));
+        setQueuePage(1); // Reset to first page on refresh
 
         // Get reviewed submissions for re-review capability
         setSubmissionStats(submissionsData.stats);
@@ -627,8 +637,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     setError(null);
 
     try {
-      // Queue all unreviewed submissions
-      for (const submission of unreviewedSubmissions) {
+      // Queue ALL unreviewed submissions (not just visible ones)
+      for (const submission of allUnreviewedSubmissions) {
         await context.api.fetch('/jobs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1303,7 +1313,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
             </div>
           )}
 
-          {/* Review Queue - Unreviewed Submissions */}
+          {/* Review Queue - Unreviewed Submissions with Pagination */}
           {submissionStats.unreviewed > 0 && (
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="review-queue">
               <div className="p-4 border-b border-slate-200 dark:border-slate-700">
@@ -1314,7 +1324,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                       Review Queue ({submissionStats.unreviewed} unreviewed)
                     </h3>
                   </div>
-                  {(hasApiKey || !apiKeyStatusKnown) && unreviewedSubmissions.length > 0 && (
+                  {(hasApiKey || !apiKeyStatusKnown) && allUnreviewedSubmissions.length > 0 && (
                     <button
                       onClick={queueAllUnreviewed}
                       disabled={queueingAll}
@@ -1325,13 +1335,15 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                       ) : (
                         <PlayCircle className="h-4 w-4" />
                       )}
-                      Review All ({unreviewedSubmissions.length})
+                      Review All ({allUnreviewedSubmissions.length})
                     </button>
                   )}
                 </div>
               </div>
               <div className="divide-y divide-slate-200 dark:divide-slate-700">
-                {unreviewedSubmissions.map((submission) => (
+                {allUnreviewedSubmissions
+                  .slice((queuePage - 1) * QUEUE_PAGE_SIZE, queuePage * QUEUE_PAGE_SIZE)
+                  .map((submission) => (
                   <div
                     key={submission.id}
                     className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50"
@@ -1358,12 +1370,37 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                     </button>
                   </div>
                 ))}
-                {submissionStats.unreviewed > 10 && (
-                  <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                    Showing first 10 of {submissionStats.unreviewed} unreviewed submissions
-                  </div>
-                )}
               </div>
+
+              {/* Pagination Controls */}
+              {allUnreviewedSubmissions.length > QUEUE_PAGE_SIZE && (
+                <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Showing {((queuePage - 1) * QUEUE_PAGE_SIZE) + 1}-{Math.min(queuePage * QUEUE_PAGE_SIZE, allUnreviewedSubmissions.length)} of {allUnreviewedSubmissions.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setQueuePage(p => Math.max(1, p - 1))}
+                      disabled={queuePage === 1}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </button>
+                    <span className="text-sm text-slate-600 dark:text-slate-400 px-2">
+                      Page {queuePage} of {Math.ceil(allUnreviewedSubmissions.length / QUEUE_PAGE_SIZE)}
+                    </span>
+                    <button
+                      onClick={() => setQueuePage(p => Math.min(Math.ceil(allUnreviewedSubmissions.length / QUEUE_PAGE_SIZE), p + 1))}
+                      disabled={queuePage >= Math.ceil(allUnreviewedSubmissions.length / QUEUE_PAGE_SIZE)}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

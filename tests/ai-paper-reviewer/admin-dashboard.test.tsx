@@ -35,6 +35,8 @@ vi.mock('lucide-react', () => ({
   RotateCcw: () => <span data-testid="icon-rotate-ccw" />,
   ChevronDown: () => <span data-testid="icon-chevron-down" />,
   ChevronUp: () => <span data-testid="icon-chevron-up" />,
+  ChevronLeft: () => <span data-testid="icon-chevron-left" />,
+  ChevronRight: () => <span data-testid="icon-chevron-right" />,
   Trash2: () => <span data-testid="icon-trash" />,
   DollarSign: () => <span data-testid="icon-dollar" />,
   RotateCw: () => <span data-testid="icon-rotate-cw" />,
@@ -893,28 +895,34 @@ describe('AdminDashboard', () => {
       });
     });
 
-    it('should show truncation message for more than 10 unreviewed submissions', async () => {
+    it('should show pagination for more than 10 unreviewed submissions', async () => {
       const manySubmissions = Array.from({ length: 15 }, (_, i) => ({
         ...mockUnreviewedSubmission,
         id: `sub-${i}`,
         title: `Submission ${i}`,
       }));
 
-      vi.spyOn(globalThis, 'fetch').mockImplementation(
-        createFetchMock({
-          submissions: {
-            submissions: manySubmissions,
-            stats: { total: 15, reviewed: 0, pending: 0, unreviewed: 15 },
-          },
-          configValue: { value: true },
-        })
-      );
+      const fetchMock = createFetchMock({
+        submissions: {
+          submissions: manySubmissions,
+          stats: { total: 15, reviewed: 0, pending: 0, unreviewed: 15 },
+        },
+        configValue: { value: true },
+      });
+      vi.spyOn(globalThis, 'fetch').mockImplementation(fetchMock);
 
       render(<AdminDashboard context={mockContext} data={{}} />);
 
+      // Wait for one of the submissions to appear (confirms data loaded)
       await waitFor(() => {
-        expect(screen.getByText('Showing first 10 of 15 unreviewed submissions')).toBeInTheDocument();
+        expect(screen.getByText('Submission 0')).toBeInTheDocument();
       });
+
+      // Then check pagination UI shows "Showing 1-10 of 15" and page controls
+      expect(screen.getByText(/Showing 1-10 of 15/)).toBeInTheDocument();
+      expect(screen.getByText(/Page 1 of 2/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Previous/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Next/ })).toBeInTheDocument();
     });
 
     it('should use default values for missing config', async () => {

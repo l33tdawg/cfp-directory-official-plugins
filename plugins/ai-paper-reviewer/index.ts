@@ -751,7 +751,7 @@ const plugin: Plugin = {
     'clear-reviews': async (
       ctx: PluginContext,
       _params: Record<string, unknown>
-    ): Promise<{ success: boolean; deletedCount?: number; error?: string }> => {
+    ): Promise<{ success: boolean; deletedCount?: number; aiReviewsDeleted?: number; error?: string }> => {
       try {
         // Get the service account ID
         const serviceAccountId = await ctx.data.get<string>('config', 'service-account-id');
@@ -762,7 +762,30 @@ const plugin: Plugin = {
 
         ctx.logger.info('Clearing all AI reviews', { serviceAccountId });
 
-        // Get all reviews from the AI reviewer
+        // First, delete all ai_reviews records for this organization
+        // This ensures the stats and review queue are reset properly
+        let aiReviewsDeleted = 0;
+        try {
+          const allAiReviews = await ctx.aiReviews.list();
+          for (const aiReview of allAiReviews) {
+            try {
+              await ctx.aiReviews.delete(aiReview.id);
+              aiReviewsDeleted++;
+            } catch (err) {
+              ctx.logger.warn('Failed to delete ai_review record', {
+                aiReviewId: aiReview.id,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+          }
+          ctx.logger.info('Deleted ai_reviews records', { count: aiReviewsDeleted });
+        } catch (err) {
+          ctx.logger.warn('Failed to clear ai_reviews table', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+
+        // Then delete the core reviews from the AI reviewer service account
         const allReviews = await ctx.reviews.list({ reviewerId: serviceAccountId });
 
         let deletedCount = 0;
@@ -798,9 +821,9 @@ const plugin: Plugin = {
           ctx.logger.warn('Failed to clear job history');
         }
 
-        ctx.logger.info('Cleared AI reviews', { deletedCount });
+        ctx.logger.info('Cleared AI reviews', { deletedCount, aiReviewsDeleted });
 
-        return { success: true, deletedCount };
+        return { success: true, deletedCount, aiReviewsDeleted };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         ctx.logger.error('Failed to clear AI reviews', { error: message });
@@ -844,6 +867,23 @@ const plugin: Plugin = {
         // Security: Only verify by reviewerId, not content pattern (which can be spoofed)
         if (review.reviewerId !== serviceAccountId) {
           return { success: false, error: 'Can only delete AI-generated reviews' };
+        }
+
+        // Also delete the corresponding ai_reviews record
+        // We need to find it by submission_id since that's how ai_reviews are keyed
+        if (review.submissionId) {
+          try {
+            const aiReview = await ctx.aiReviews.get(review.submissionId);
+            if (aiReview) {
+              await ctx.aiReviews.delete(aiReview.id);
+              ctx.logger.info('Deleted ai_review record', { aiReviewId: aiReview.id });
+            }
+          } catch (err) {
+            ctx.logger.warn('Failed to delete ai_review record', {
+              submissionId: review.submissionId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
         }
 
         await ctx.reviews.delete(reviewId);

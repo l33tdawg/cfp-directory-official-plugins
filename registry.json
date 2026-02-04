@@ -76,7 +76,7 @@
         "required": ["apiKey"]
       },
       "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/ai-paper-reviewer-v1.22.0/ai-paper-reviewer.zip",
-      "sha256": "0fddcd2b13c97af1b76e98d998adc1134a0ebf8b28d91903074e28251b53f971"
+      "sha256": "3fba0d98b365c64939cac90052f88ab21df18879e02209212830431269f34977"
     },
     {
       "name": "example-webhook",

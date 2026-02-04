@@ -326,34 +326,36 @@ function ModelStep({
         </p>
       </div>
 
-      <div className="grid gap-3">
+      <div className="grid gap-3 max-h-[400px] overflow-y-auto">
         {models.map((model) => (
           <button
             key={model.value}
             onClick={() => onSelect(model.value)}
-            className={`relative p-4 text-left rounded-lg border-2 transition-all ${
+            className={`p-4 text-left rounded-lg border-2 transition-all ${
               selectedModel === model.value
                 ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30'
                 : 'border-slate-200 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-700'
             }`}
           >
-            {selectedModel === model.value && (
-              <div className="absolute top-3 right-3">
-                <CheckCircle className="h-5 w-5 text-purple-600" />
+            <div className="flex items-start gap-3">
+              {/* Selection indicator */}
+              <div className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                selectedModel === model.value
+                  ? 'border-purple-500 bg-purple-500'
+                  : 'border-slate-300 dark:border-slate-600'
+              }`}>
+                {selectedModel === model.value && (
+                  <Check className="h-3 w-3 text-white" />
+                )}
               </div>
-            )}
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
+
+              {/* Model info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold text-slate-900 dark:text-white">{model.label}</h3>
-                  {model.recommended && (
-                    <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded-full">
-                      Recommended
-                    </span>
-                  )}
                 </div>
                 {model.description && (
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
                     {model.description}
                   </p>
                 )}
@@ -535,16 +537,17 @@ export function AdminOnboarding({ context, onComplete }: PluginComponentProps & 
       }
 
       // Store models for next step
-      const modelList: ModelOption[] = data.models.map((m: { id: string; name: string; description?: string }) => ({
+      // Note: API already includes "(Recommended)" in name for recommended models
+      const modelList: ModelOption[] = data.models.map((m: { id: string; name: string; description?: string; recommended?: boolean }) => ({
         value: m.id,
         label: m.name,
         description: m.description,
-        recommended: m.name.toLowerCase().includes('recommended') || m.id.includes('4o') || m.id.includes('sonnet'),
+        recommended: m.recommended || m.name.toLowerCase().includes('recommended'),
       }));
       setModels(modelList);
       setKeyValidated(true);
 
-      // Auto-select recommended model if available
+      // Auto-select the first recommended model (they're sorted with recommended first)
       const recommended = modelList.find((m) => m.recommended);
       if (recommended) {
         setSelectedModel(recommended.value);

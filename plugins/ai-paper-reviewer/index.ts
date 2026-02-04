@@ -942,7 +942,7 @@ export async function handleAiReviewJob(
   const submissionId = payload.submissionId as string;
   let eventId = payload.eventId as string | undefined;
 
-  ctx.logger.info('Processing AI review job', { submissionId, isReReview: payload.isReReview });
+  ctx.logger.debug('Processing AI review job', { submissionId, isReReview: payload.isReReview });
 
   // For re-reviews or when abstract is missing, fetch full submission data
   // NOTE: Email is intentionally excluded for privacy - only public info is sent to AI
@@ -972,7 +972,7 @@ export async function handleAiReviewJob(
       : await ctx.submissions.get(submissionId);
 
     // Security: Don't log content previews - only log metadata
-    ctx.logger.info('Submission fetch result', {
+    ctx.logger.debug('Submission fetch result', {
       submissionId,
       found: !!submission,
       hasAbstract: !!submission?.abstract,
@@ -1093,7 +1093,7 @@ export async function handleAiReviewJob(
           status: 'processing',
           error_message: null,
         });
-        ctx.logger.info('Updating existing ai_review record', { aiReviewId, submissionId });
+        ctx.logger.debug('Updating existing ai_review record', { aiReviewId, submissionId });
       } else {
         // Create new ai_review record
         const newAiReview = await ctx.aiReviews.create({
@@ -1102,7 +1102,7 @@ export async function handleAiReviewJob(
         });
         aiReviewId = newAiReview.id;
         await ctx.aiReviews.update(aiReviewId, { status: 'processing' });
-        ctx.logger.info('Created ai_review record', { aiReviewId, submissionId });
+        ctx.logger.debug('Created ai_review record', { aiReviewId, submissionId });
       }
     } catch (err) {
       ctx.logger.warn('Failed to create/update ai_review record', {
@@ -1232,14 +1232,9 @@ export async function handleAiReviewJob(
 
       ctx.logger.info('AI review completed', {
         submissionId,
-        overallScore: result.overallScore,
+        score: result.overallScore,
         recommendation: result.recommendation,
-        confidence: result.confidence,
-        inputTruncated,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        costUsd: costUsd.toFixed(4),
-        totalSpend: updatedStats.totalSpend.toFixed(4),
+        cost: `$${costUsd.toFixed(4)}`,
       });
     } catch (costErr) {
       // Log but don't fail the review if cost tracking fails
@@ -1248,10 +1243,8 @@ export async function handleAiReviewJob(
       });
       ctx.logger.info('AI review completed', {
         submissionId,
-        overallScore: result.overallScore,
+        score: result.overallScore,
         recommendation: result.recommendation,
-        confidence: result.confidence,
-        inputTruncated,
       });
     }
 
@@ -1263,13 +1256,13 @@ export async function handleAiReviewJob(
     try {
       // Get the service account ID
       const serviceAccountId = await ctx.data.get<string>('config', 'service-account-id');
-      ctx.logger.info('Service account lookup', { serviceAccountId, submissionId });
+      ctx.logger.debug('Service account lookup', { serviceAccountId, submissionId });
 
       if (serviceAccountId) {
         // Check if there's an existing review from this service account for this submission
         const existingReviews = await ctx.reviews.list({ submissionId, reviewerId: serviceAccountId });
         const existingReview = existingReviews.length > 0 ? existingReviews[0] : null;
-        ctx.logger.info('Existing review check', {
+        ctx.logger.debug('Existing review check', {
           foundReviews: existingReviews.length,
           existingReviewId: existingReview?.id || null,
           submissionId,
@@ -1336,7 +1329,7 @@ export async function handleAiReviewJob(
         if (existingReview) {
           // Update existing review (for re-reviews)
           review = await ctx.reviews.update(existingReview.id, reviewData);
-          ctx.logger.info('Updated existing review in core reviews table', {
+          ctx.logger.debug('Updated existing review in core reviews table', {
             reviewId: review.id,
             submissionId,
             overallScore: result.overallScore,
@@ -1349,7 +1342,7 @@ export async function handleAiReviewJob(
               reviewerId: serviceAccountId,
               ...reviewData,
             });
-            ctx.logger.info('Created review in core reviews table', {
+            ctx.logger.debug('Created review in core reviews table', {
               reviewId: review.id,
               submissionId,
               overallScore: result.overallScore,
@@ -1357,14 +1350,14 @@ export async function handleAiReviewJob(
           } catch (createError) {
             // If unique constraint error, find the review by submission and update it
             if (createError instanceof Error && createError.message.includes('Unique constraint')) {
-              ctx.logger.info('Review already exists, finding and updating...', { submissionId });
+              ctx.logger.debug('Review already exists, finding and updating...', { submissionId });
               const allReviews = await ctx.reviews.getBySubmission(submissionId);
               // SECURITY: Only identify AI reviews by reviewerId - never by content pattern
               // Content-based detection (e.g., privateNotes prefix) can be spoofed by other reviewers
               const aiReview = allReviews.find(r => r.reviewerId === serviceAccountId);
               if (aiReview) {
                 review = await ctx.reviews.update(aiReview.id, reviewData);
-                ctx.logger.info('Updated review after unique constraint error', {
+                ctx.logger.debug('Updated review after unique constraint error', {
                   reviewId: review.id,
                   submissionId,
                   overallScore: result.overallScore,
@@ -1421,7 +1414,7 @@ export async function handleAiReviewJob(
           completed_at: new Date().toISOString(),
           error_message: null,
         });
-        ctx.logger.info('Updated ai_review record with results', {
+        ctx.logger.debug('Updated ai_review record with results', {
           aiReviewId,
           submissionId,
           status: 'completed',

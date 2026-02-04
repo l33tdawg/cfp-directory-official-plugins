@@ -1,7 +1,7 @@
 {
   "name": "ai-paper-reviewer",
   "displayName": "AI Paper Reviewer",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "apiVersion": "1.0",
   "description": "Intelligent submission analysis with cost tracking, budget management, speaker context, and criteria-based scoring",
   "author": "CFP Directory",

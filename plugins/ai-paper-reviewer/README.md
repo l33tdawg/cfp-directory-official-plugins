@@ -5,6 +5,7 @@ Automatically analyzes paper/talk submissions using AI to provide preliminary re
 ## Features
 
 - **Multi-provider support** - OpenAI, Anthropic (Claude), and Google Gemini
+- **Google Search grounding** - Gemini can fact-check recent events, vulnerabilities, and claims using Google Search (recommended)
 - **Core review integration** - AI reviews appear in the standard submissions list with scores
 - **Service account** - Plugin creates its own reviewer account (hidden from public by default)
 - **Event-aware criteria** - Uses the event's configured review criteria and weights
@@ -38,9 +39,10 @@ Automatically analyzes paper/talk submissions using AI to provide preliminary re
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| **AI Provider** | OpenAI, Anthropic, or Gemini | `openai` |
+| **AI Provider** | Gemini (recommended), OpenAI, or Anthropic | `gemini` |
 | **API Key** | API key for your chosen provider | *(required)* |
-| **Model** | AI model to use | `gpt-4o` |
+| **Model** | AI model to use | `gemini-2.0-flash` |
+| **Enable Web Search** | Allow Gemini to search the web for fact-checking (Gemini only) | `true` |
 | **Temperature** | 0.0 = consistent, 1.0 = creative | `0.3` |
 | **Max Tokens** | Maximum tokens for AI response | `2000` |
 | **Use Event Criteria** | Use the event's review criteria and weights | `true` |
@@ -147,7 +149,26 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.14.1 (Current)
+### v1.26.0 (Current)
+- **Bug fix: Include full talk description in AI review**
+  - AI now sees the "Full Talk Description" content (was missing)
+  - Better context for comprehensive reviews
+
+### v1.25.0
+- **Google Search grounding for fact-checking (Gemini)**
+  - Verify claims about recent events, security vulnerabilities, tools
+  - No extra API keys needed - works with existing Gemini API key
+  - Configurable via "Enable Web Search" setting
+- **Gemini now default/recommended provider**
+  - Onboarding wizard shows "Recommended" badge
+  - Default model: gemini-2.0-flash
+- Added comprehensive provider tests
+
+### v1.24.0
+- Reduced verbose logging (DEBUG level for most logs)
+- Dashboard stats fixes
+
+### v1.14.1
 - Fix: TypeScript type annotation for filter callback
 - Fix: Release package now includes pre-built admin bundle
 

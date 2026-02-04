@@ -137,10 +137,23 @@ describe('AI Paper Reviewer Plugin', () => {
       expect(text).toContain('Abstract:\nThis is the abstract.');
     });
 
+    it('should include description (full talk description) field', () => {
+      const text = buildSubmissionText({
+        title: 'macOS Security',
+        abstract: 'This talk covers macOS security.',
+        description: '- Security mechanisms\n- Threat hunting\n- TTPs',
+      });
+
+      expect(text).toContain('Title: macOS Security');
+      expect(text).toContain('Abstract:\nThis talk covers macOS security.');
+      expect(text).toContain('Full Talk Description:\n- Security mechanisms');
+    });
+
     it('should include all fields when provided', () => {
       const text = buildSubmissionText({
         title: 'Advanced TypeScript',
         abstract: 'Deep dive into TS.',
+        description: 'Detailed talk content here.',
         outline: '1. Intro\n2. Types\n3. Patterns',
         targetAudience: 'Senior developers',
         prerequisites: 'Basic TypeScript knowledge',
@@ -148,6 +161,7 @@ describe('AI Paper Reviewer Plugin', () => {
 
       expect(text).toContain('Title: Advanced TypeScript');
       expect(text).toContain('Abstract:\nDeep dive into TS.');
+      expect(text).toContain('Full Talk Description:\nDetailed talk content here.');
       expect(text).toContain('Outline:\n1. Intro');
       expect(text).toContain('Target Audience: Senior developers');
       expect(text).toContain('Prerequisites: Basic TypeScript knowledge');

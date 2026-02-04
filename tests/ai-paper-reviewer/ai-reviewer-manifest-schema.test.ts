@@ -57,6 +57,7 @@ describe('Manifest configSchema extensions', () => {
     const expectedGroups: Record<string, string> = {
       aiProvider: 'provider',
       apiKey: 'provider',
+      enableWebSearch: 'provider',
       model: 'provider',
       strictnessLevel: 'review',
       useEventCriteria: 'review',
@@ -98,9 +99,10 @@ describe('Manifest configSchema extensions', () => {
       }
     });
 
-    it('aiProvider hint mentions providers', () => {
+    it('aiProvider hint mentions Gemini recommendation', () => {
       const hint = properties.aiProvider['x-friendly-hint'];
-      expect(hint.toLowerCase()).toContain('provider');
+      expect(hint.toLowerCase()).toContain('gemini');
+      expect(hint.toLowerCase()).toContain('recommended');
     });
 
     it('apiKey hint mentions security', () => {
@@ -242,12 +244,46 @@ describe('Manifest configSchema extensions', () => {
   });
 
   // -----------------------------------------------------------------------
+  // enableWebSearch and x-visible-when
+  // -----------------------------------------------------------------------
+
+  describe('enableWebSearch config', () => {
+    const webSearchProp = properties.enableWebSearch;
+
+    it('enableWebSearch exists in provider group', () => {
+      expect(webSearchProp).toBeDefined();
+      expect(webSearchProp['x-group']).toBe('provider');
+    });
+
+    it('enableWebSearch is a boolean with default true', () => {
+      expect(webSearchProp.type).toBe('boolean');
+      expect(webSearchProp.default).toBe(true);
+    });
+
+    it('enableWebSearch has x-visible-when for Gemini only', () => {
+      expect(webSearchProp['x-visible-when']).toBeDefined();
+      expect(webSearchProp['x-visible-when'].aiProvider).toBe('gemini');
+    });
+
+    it('enableWebSearch has x-depends-on for aiProvider', () => {
+      expect(webSearchProp['x-depends-on']).toBeDefined();
+      expect(webSearchProp['x-depends-on']).toContain('aiProvider');
+    });
+
+    it('enableWebSearch has descriptive title and hint', () => {
+      expect(webSearchProp.title).toContain('Web Search');
+      expect(webSearchProp['x-friendly-hint']).toBeDefined();
+      expect(webSearchProp['x-friendly-hint'].toLowerCase()).toContain('google search');
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Version bump
   // -----------------------------------------------------------------------
 
   describe('version', () => {
-    it('manifest version is 1.22.0', () => {
-      expect(manifest.version).toBe('1.22.0');
+    it('manifest version is 1.26.0', () => {
+      expect(manifest.version).toBe('1.26.0');
     });
   });
 
@@ -319,8 +355,8 @@ describe('Manifest configSchema extensions', () => {
     });
 
     it('has expected number of properties', () => {
-      // provider (3) + review (2) + automation (2) + budget (3) + detection (2) + advanced (5) = 17
-      expect(Object.keys(properties).length).toBe(17);
+      // provider (4: aiProvider, apiKey, enableWebSearch, model) + review (2) + automation (2) + budget (3) + detection (2) + advanced (5) = 18
+      expect(Object.keys(properties).length).toBe(18);
     });
 
     it('all properties have type and title', () => {

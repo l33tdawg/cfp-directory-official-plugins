@@ -202,6 +202,7 @@ interface CoSpeakerInfo {
 export function buildSubmissionText(submission: {
   title: string;
   abstract: string | null;
+  description?: string | null;
   outline?: string | null;
   targetAudience?: string | null;
   prerequisites?: string | null;
@@ -212,6 +213,9 @@ export function buildSubmissionText(submission: {
 
   if (submission.abstract) {
     parts.push(`\nAbstract:\n${submission.abstract}`);
+  }
+  if (submission.description) {
+    parts.push(`\nFull Talk Description:\n${submission.description}`);
   }
   if (submission.outline) {
     parts.push(`\nOutline:\n${submission.outline}`);
@@ -955,6 +959,7 @@ export async function handleAiReviewJob(
   let submissionData: {
     title: string;
     abstract: string | null;
+    description: string | null;
     outline: string | null;
     targetAudience: string | null;
     prerequisites: string | null;
@@ -963,6 +968,7 @@ export async function handleAiReviewJob(
   } = {
     title: payload.title as string,
     abstract: payload.abstract as string | null,
+    description: payload.description as string | null,
     outline: payload.outline as string | null,
     targetAudience: payload.targetAudience as string | null,
     prerequisites: payload.prerequisites as string | null,
@@ -983,6 +989,8 @@ export async function handleAiReviewJob(
       found: !!submission,
       hasAbstract: !!submission?.abstract,
       abstractLength: submission?.abstract?.length || 0,
+      hasDescription: !!((submission as Record<string, unknown>)?.description),
+      descriptionLength: ((submission as Record<string, unknown>)?.description as string)?.length || 0,
       hasSpeakerInfo: !!(submission && 'speaker' in submission && submission.speaker),
       coSpeakerCount: (submission && 'coSpeakers' in submission) ? (submission.coSpeakers as unknown[]).length : 0,
     });
@@ -991,6 +999,7 @@ export async function handleAiReviewJob(
       submissionData = {
         title: submission.title,
         abstract: submission.abstract,
+        description: (submission as Record<string, unknown>).description as string | null,
         outline: (submission as Record<string, unknown>).outline as string | null,
         targetAudience: (submission as Record<string, unknown>).targetAudience as string | null,
         prerequisites: (submission as Record<string, unknown>).prerequisites as string | null,
@@ -1205,6 +1214,7 @@ export async function handleAiReviewJob(
     const submissionText = buildSubmissionText({
       title: submissionData.title,
       abstract: submissionData.abstract,
+      description: submissionData.description,
       outline: submissionData.outline,
       targetAudience: submissionData.targetAudience,
       prerequisites: submissionData.prerequisites,

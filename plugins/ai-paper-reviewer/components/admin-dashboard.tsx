@@ -593,8 +593,10 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
 
   const queueReview = async (submission: UnreviewedSubmission) => {
     setQueueingIds((prev) => new Set(prev).add(submission.id));
+    setError(null);
 
     try {
+      console.log('[AI Reviewer] Queuing review for submission:', submission.id);
       const response = await context.api.fetch('/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -609,14 +611,28 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         }),
       });
 
+      console.log('[AI Reviewer] Response status:', response.status);
+
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to queue review');
+        const text = await response.text();
+        console.error('[AI Reviewer] Error response:', text);
+        let errorMessage = 'Failed to queue review';
+        try {
+          const data = JSON.parse(text);
+          errorMessage = data.error || errorMessage;
+        } catch {
+          errorMessage = text || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
+
+      const result = await response.json();
+      console.log('[AI Reviewer] Job created:', result);
 
       // Refresh data silently to show updated status without full page spinner
       await refreshDataSilent();
     } catch (err) {
+      console.error('[AI Reviewer] Queue error:', err);
       setError(err instanceof Error ? err.message : 'Failed to queue review');
     } finally {
       setQueueingIds((prev) => {
@@ -1132,7 +1148,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                   Personas
                 </a>
                 <a
-                  href={`/admin/plugins/${context.pluginId}`}
+                  href={`/organizations/${context.organizationId}/manage/plugins/${context.pluginName}`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
                   <Settings className="h-4 w-4" />

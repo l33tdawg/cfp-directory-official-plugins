@@ -149,9 +149,10 @@ const mockUnreviewedSubmission = {
   status: 'submitted',
   createdAt: '2024-01-15T10:00:00Z',
   eventId: 'event-1',
-  event: { id: 'event-1', name: 'TechConf 2024' },
-  speaker: { id: 'speaker-1', name: 'John Doe' },
-  aiReview: { status: 'unreviewed' as const },
+  event: { id: 'event-1', name: 'TechConf 2024', slug: 'techconf-2024' },
+  hasAiReview: false,
+  aiReviewStatus: 'none',
+  aiReview: null,
 };
 
 const mockSubmissionsResponse = {
@@ -504,7 +505,6 @@ describe('AdminDashboard', () => {
       await waitFor(() => {
         expect(screen.getByText('Unreviewed Submission')).toBeInTheDocument();
         expect(screen.getByText(/TechConf 2024/)).toBeInTheDocument();
-        expect(screen.getByText(/John Doe/)).toBeInTheDocument();
       });
     });
 

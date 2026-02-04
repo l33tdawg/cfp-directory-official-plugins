@@ -280,7 +280,7 @@ describe('Manifest configSchema extensions', () => {
       );
       expect(dashboardItem).toBeDefined();
       expect(dashboardItem.label).toBe('Dashboard');
-      expect(dashboardItem.path).toBe('/');
+      expect(dashboardItem.path).toBe('/dashboard');
       expect(dashboardItem.icon).toBe('LayoutDashboard');
     });
 

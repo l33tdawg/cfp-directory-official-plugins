@@ -204,15 +204,18 @@ interface SubmissionWithReview {
   status: string;
   createdAt: string;
   eventId: string;
-  event: { id: string; name: string };
-  speaker: { id: string; name: string };
+  event: { id: string; name: string; slug: string } | null;
+  hasAiReview: boolean;
+  aiReviewStatus: string; // 'none', 'pending', 'processing', 'completed', 'failed'
   aiReview: {
-    status: 'unreviewed' | 'pending' | 'running' | 'reviewed';
-    jobId?: string;
-    score?: number | null;
-    recommendation?: string | null;
-    reviewedAt?: string | null;
-  };
+    id: string;
+    status: string;
+    overallScore: number | null;
+    recommendation: string | null;
+    confidence: number | null;
+    createdAt: string;
+    completedAt: string | null;
+  } | null;
 }
 
 // Alias for backwards compatibility
@@ -375,7 +378,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       // Update submissions
       if (submissionsData.submissions) {
         const unreviewed = submissionsData.submissions.filter(
-          (s: SubmissionWithReview) => s.aiReview.status === 'unreviewed'
+          (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || !s.aiReview
         );
         setUnreviewedSubmissions(unreviewed.slice(0, 10));
 
@@ -550,7 +553,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       // Set submission data
       if (submissionsData.submissions) {
         const unreviewed = submissionsData.submissions.filter(
-          (s: SubmissionWithReview) => s.aiReview.status === 'unreviewed'
+          (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || !s.aiReview
         );
         setUnreviewedSubmissions(unreviewed.slice(0, 10)); // Show first 10
 
@@ -1338,7 +1341,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                         {submission.title}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {submission.event.name} | {submission.speaker.name} | {new Date(submission.createdAt).toLocaleDateString()}
+                        {submission.event?.name || 'Unknown Event'} | {new Date(submission.createdAt).toLocaleDateString()}
                       </p>
                     </div>
                     <button

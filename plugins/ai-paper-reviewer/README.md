@@ -149,7 +149,15 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.26.0 (Current)
+### v1.28.0 (Current)
+- Standardized version tagging to `v<version>` format
+- Updated README with current version
+
+### v1.27.0
+- Configuration UI improvements
+- Bug fixes and stability improvements
+
+### v1.26.0
 - **Bug fix: Include full talk description in AI review**
   - AI now sees the "Full Talk Description" content (was missing)
   - Better context for comprehensive reviews

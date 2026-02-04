@@ -92,7 +92,7 @@ describe('Model Fetcher', () => {
       expect(modelIds).not.toContain('tts-1');
     });
 
-    it('should mark recommended models', async () => {
+    it('should mark only one recommended model (gpt-4o)', async () => {
       const mockResponse = {
         object: 'list',
         data: [
@@ -111,11 +111,38 @@ describe('Model Fetcher', () => {
       const result = await fetchOpenAIModels('valid-key');
       expect(result.success).toBe(true);
 
+      // Only gpt-4o should be recommended
       const gpt4o = result.models!.find((m) => m.id === 'gpt-4o');
       expect(gpt4o?.name).toContain('(Recommended)');
 
+      // gpt-4o-mini should NOT be recommended (only one recommended per provider)
+      const gpt4oMini = result.models!.find((m) => m.id === 'gpt-4o-mini');
+      expect(gpt4oMini?.name).not.toContain('(Recommended)');
+
       const gpt35 = result.models!.find((m) => m.id === 'gpt-3.5-turbo');
       expect(gpt35?.name).not.toContain('(Recommended)');
+    });
+
+    it('should limit results to 10 models', async () => {
+      const mockResponse = {
+        object: 'list',
+        data: Array.from({ length: 20 }, (_, i) => ({
+          id: `gpt-4-variant-${i}`,
+          created: 1700000000 - i * 1000,
+          owned_by: 'openai',
+          object: 'model',
+        })),
+      };
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockResponse),
+      } as Response);
+
+      const result = await fetchOpenAIModels('valid-key');
+      expect(result.success).toBe(true);
+      expect(result.models!.length).toBeLessThanOrEqual(10);
     });
 
     it('should handle network errors', async () => {
@@ -291,7 +318,7 @@ describe('Model Fetcher', () => {
       );
     });
 
-    it('should remove duplicate models', async () => {
+    it('should filter out versioned variants (ending in 3 digits)', async () => {
       const mockResponse = {
         models: [
           {
@@ -302,7 +329,7 @@ describe('Model Fetcher', () => {
           },
           {
             name: 'models/gemini-2.0-flash-001',
-            baseModelId: 'gemini-2.0-flash',
+            baseModelId: 'gemini-2.0-flash-001',
             displayName: 'Gemini 2.0 Flash (v001)',
             supportedGenerationMethods: ['generateContent'],
           },
@@ -318,9 +345,124 @@ describe('Model Fetcher', () => {
       const result = await fetchGeminiModels('valid-key');
       expect(result.success).toBe(true);
 
-      // Should only have one entry for gemini-2.0-flash
-      const flashModels = result.models!.filter((m) => m.id === 'gemini-2.0-flash');
-      expect(flashModels).toHaveLength(1);
+      // Should only have the main model, not the versioned variant
+      const modelIds = result.models!.map((m) => m.id);
+      expect(modelIds).toContain('gemini-2.0-flash');
+      expect(modelIds).not.toContain('gemini-2.0-flash-001');
+    });
+
+    it('should filter out image generation, TTS, and experimental models', async () => {
+      const mockResponse = {
+        models: [
+          {
+            name: 'models/gemini-2.0-flash',
+            baseModelId: 'gemini-2.0-flash',
+            displayName: 'Gemini 2.0 Flash',
+            supportedGenerationMethods: ['generateContent'],
+          },
+          {
+            name: 'models/gemini-2.0-flash-image-generation',
+            baseModelId: 'gemini-2.0-flash-image-generation',
+            displayName: 'Gemini 2.0 Flash (Image Generation)',
+            supportedGenerationMethods: ['generateContent'],
+          },
+          {
+            name: 'models/gemini-experimental-1206',
+            baseModelId: 'gemini-experimental-1206',
+            displayName: 'Gemini Experimental 1206',
+            supportedGenerationMethods: ['generateContent'],
+          },
+          {
+            name: 'models/gemini-2.5-pro-preview',
+            baseModelId: 'gemini-2.5-pro-preview',
+            displayName: 'Gemini 2.5 Pro Preview TTS',
+            supportedGenerationMethods: ['generateContent'],
+          },
+        ],
+      };
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockResponse),
+      } as Response);
+
+      const result = await fetchGeminiModels('valid-key');
+      expect(result.success).toBe(true);
+
+      const modelIds = result.models!.map((m) => m.id);
+      // Should include the main model
+      expect(modelIds).toContain('gemini-2.0-flash');
+      // Should exclude image generation, experimental, and preview models
+      expect(modelIds).not.toContain('gemini-2.0-flash-image-generation');
+      expect(modelIds).not.toContain('gemini-experimental-1206');
+      expect(modelIds).not.toContain('gemini-2.5-pro-preview');
+    });
+
+    it('should only mark gemini-2.0-flash as recommended', async () => {
+      const mockResponse = {
+        models: [
+          {
+            name: 'models/gemini-2.0-flash',
+            baseModelId: 'gemini-2.0-flash',
+            displayName: 'Gemini 2.0 Flash',
+            supportedGenerationMethods: ['generateContent'],
+          },
+          {
+            name: 'models/gemini-1.5-pro',
+            baseModelId: 'gemini-1.5-pro',
+            displayName: 'Gemini 1.5 Pro',
+            supportedGenerationMethods: ['generateContent'],
+          },
+          {
+            name: 'models/gemini-2.5-pro',
+            baseModelId: 'gemini-2.5-pro',
+            displayName: 'Gemini 2.5 Pro',
+            supportedGenerationMethods: ['generateContent'],
+          },
+        ],
+      };
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockResponse),
+      } as Response);
+
+      const result = await fetchGeminiModels('valid-key');
+      expect(result.success).toBe(true);
+
+      // Only gemini-2.0-flash should be recommended
+      const flash = result.models!.find((m) => m.id === 'gemini-2.0-flash');
+      expect(flash?.name).toContain('(Recommended)');
+
+      // Other models should NOT be recommended
+      const pro15 = result.models!.find((m) => m.id === 'gemini-1.5-pro');
+      expect(pro15?.name).not.toContain('(Recommended)');
+
+      const pro25 = result.models!.find((m) => m.id === 'gemini-2.5-pro');
+      expect(pro25?.name).not.toContain('(Recommended)');
+    });
+
+    it('should limit results to 10 models', async () => {
+      const mockResponse = {
+        models: Array.from({ length: 20 }, (_, i) => ({
+          name: `models/gemini-model-${i}`,
+          baseModelId: `gemini-model-${i}`,
+          displayName: `Gemini Model ${i}`,
+          supportedGenerationMethods: ['generateContent'],
+        })),
+      };
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockResponse),
+      } as Response);
+
+      const result = await fetchGeminiModels('valid-key');
+      expect(result.success).toBe(true);
+      expect(result.models!.length).toBeLessThanOrEqual(10);
     });
   });
 

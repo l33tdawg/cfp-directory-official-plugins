@@ -55,7 +55,11 @@ const OPENAI_EXCLUDED_PATTERNS = [
   'realtime',
 ];
 
-const OPENAI_RECOMMENDED_MODELS = ['gpt-4o', 'gpt-4o-mini'];
+// Only mark ONE model as recommended per provider - the best all-around choice
+const OPENAI_RECOMMENDED_MODELS = ['gpt-4o'];
+
+// Maximum models to return per provider
+const MAX_MODELS = 10;
 
 function formatOpenAIModelLabel(modelId: string): string {
   // GPT-4o -> GPT-4o, gpt-4o-mini -> GPT-4o Mini
@@ -137,8 +141,8 @@ export async function fetchOpenAIModels(apiKey: string): Promise<FetchModelsResu
       return 0;
     });
 
-    // Add "(Recommended)" to name for recommended models
-    const models = filteredModels.map((m) => ({
+    // Add "(Recommended)" to name for recommended models and limit to MAX_MODELS
+    const models = filteredModels.slice(0, MAX_MODELS).map((m) => ({
       ...m,
       name: m.recommended ? `${m.name} (Recommended)` : m.name,
     }));
@@ -173,7 +177,8 @@ interface AnthropicModelsResponse {
   has_more: boolean;
 }
 
-const ANTHROPIC_RECOMMENDED_MODELS = ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022'];
+// Only mark ONE model as recommended - the best all-around choice
+const ANTHROPIC_RECOMMENDED_MODELS = ['claude-sonnet-4-20250514'];
 
 export async function fetchAnthropicModels(apiKey: string): Promise<FetchModelsResult> {
   if (!apiKey) {
@@ -229,14 +234,14 @@ export async function fetchAnthropicModels(apiKey: string): Promise<FetchModelsR
       };
     });
 
-    // Sort recommended models first
+    // Sort recommended models first and limit to MAX_MODELS
     models.sort((a, b) => {
       if (a.recommended && !b.recommended) return -1;
       if (!a.recommended && b.recommended) return 1;
       return 0;
     });
 
-    return { success: true, models };
+    return { success: true, models: models.slice(0, MAX_MODELS) };
   } catch (error) {
     return {
       success: false,
@@ -268,7 +273,23 @@ interface GeminiModelsResponse {
   nextPageToken?: string;
 }
 
-const GEMINI_RECOMMENDED_MODELS = ['gemini-2.0-flash', 'gemini-2.5-pro', 'gemini-1.5-pro'];
+// Only mark ONE model as recommended - the best all-around choice for text generation
+const GEMINI_RECOMMENDED_MODEL = 'gemini-2.0-flash';
+
+// Exclude these patterns from Gemini models (not suitable for paper review)
+const GEMINI_EXCLUDED_PATTERNS = [
+  'imagen',
+  'image-generation',
+  'tts',
+  'text-to-speech',
+  'embedding',
+  'aqa',
+  'experimental',
+  'exp-',
+  '-exp',
+  'lite',
+  'preview',
+];
 
 export async function fetchGeminiModels(apiKey: string): Promise<FetchModelsResult> {
   if (!apiKey) {
@@ -321,10 +342,28 @@ export async function fetchGeminiModels(apiKey: string): Promise<FetchModelsResu
     const data: GeminiModelsResponse = await response.json();
 
     const filteredModels = data.models
-      .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+      .filter((m) => {
+        // Must support text generation
+        if (!m.supportedGenerationMethods?.includes('generateContent')) return false;
+
+        const modelId = (m.baseModelId || m.name.replace('models/', '')).toLowerCase();
+        const displayName = m.displayName.toLowerCase();
+
+        // Exclude models not suitable for paper review
+        const isExcluded = GEMINI_EXCLUDED_PATTERNS.some(
+          (p) => modelId.includes(p) || displayName.includes(p)
+        );
+        if (isExcluded) return false;
+
+        // Only include main Gemini models (not versioned variants like -001, -002)
+        if (/\d{3}$/.test(modelId)) return false;
+
+        return true;
+      })
       .map((m) => {
         const modelId = m.baseModelId || m.name.replace('models/', '');
-        const isRecommended = GEMINI_RECOMMENDED_MODELS.some((r) => modelId.includes(r));
+        // Exact match for recommended model
+        const isRecommended = modelId === GEMINI_RECOMMENDED_MODEL;
         return {
           id: modelId,
           name: isRecommended ? `${m.displayName} (Recommended)` : m.displayName,
@@ -347,7 +386,7 @@ export async function fetchGeminiModels(apiKey: string): Promise<FetchModelsResu
       return 0;
     });
 
-    return { success: true, models: uniqueModels };
+    return { success: true, models: uniqueModels.slice(0, MAX_MODELS) };
   } catch (error) {
     return {
       success: false,

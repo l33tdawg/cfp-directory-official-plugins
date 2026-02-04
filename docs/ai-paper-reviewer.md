@@ -1,6 +1,6 @@
 # AI Paper Reviewer Plugin
 
-> **Current Version:** 1.14.0
+> **Current Version:** 1.26.0
 > **Plugin API Version:** 1.0
 > **Requires:** Plugin System v1.13.0+
 > **Status:** Production Ready
@@ -31,7 +31,8 @@ The AI Paper Reviewer plugin acts as an automated program committee member, prov
 - **Speaker context awareness** - Considers speaker bio, experience, and expertise (v1.13.0+)
 - **Duplicate detection** - Identifies similar submissions within the event
 - **Confidence levels** - Knows when it's uncertain and flags low-confidence results
-- **Multi-provider support** - OpenAI, Anthropic (Claude), and Google Gemini
+- **Multi-provider support** - Google Gemini (recommended), OpenAI, Anthropic (Claude)
+- **Google Search grounding** - Gemini can fact-check recent events, vulnerabilities, and claims (v1.25.0+)
 
 ### Why a Plugin?
 
@@ -39,19 +40,34 @@ The AI Paper Reviewer plugin acts as an automated program committee member, prov
 |---------|-----------------|
 | **Cost** | Only organizations that want AI review pay for API calls |
 | **Privacy** | Some orgs may not want submissions sent to external AI |
-| **Provider Choice** | Users can pick OpenAI, Anthropic, or Google |
+| **Provider Choice** | Users can pick Gemini, OpenAI, or Anthropic |
 | **Modularity** | Can be disabled/removed without affecting core functionality |
 | **Updates** | Plugin updates independently of the main application |
+
+### Why Gemini is Recommended
+
+**Google Search Grounding** (v1.25.0+) allows Gemini to:
+- **Fact-check recent events**: Verify claims about security vulnerabilities, CVEs, tools, and incidents
+- **Validate technical accuracy**: Check if referenced tools, frameworks, or libraries exist and are current
+- **Assess timeliness**: Determine if topics are still relevant or outdated
+- **No extra cost**: Grounding is included with Gemini API at no additional charge
+- **No extra API keys**: Uses your existing Gemini API key
+
+This is particularly valuable for security conferences where submissions often reference recent vulnerabilities, malware campaigns, or emerging threats that may be beyond the AI's training data cutoff.
+
+OpenAI and Anthropic produce excellent reviews but cannot verify facts against current information.
 
 ---
 
 ## Features
 
-### Current Features (v1.14.0)
+### Current Features (v1.26.0)
 
-- **Multi-provider support**: OpenAI, Anthropic (Claude), Google Gemini
+- **Multi-provider support**: Google Gemini (recommended), OpenAI, Anthropic (Claude)
+- **Google Search grounding**: Gemini can fact-check recent events, vulnerabilities, tools, and claims using web search (v1.25.0+)
 - **Dynamic model selection**: Fetches available models from your provider
 - **Event-aware criteria**: Uses the event's configured review criteria and weights
+- **Full submission context**: Includes abstract, full talk description, outline, and all submission details (v1.26.0+)
 - **Speaker profile context**: Includes speaker bio, experience level, expertise tags, and social profiles
 - **Co-speaker support**: Considers all speakers when reviewing
 - **Configurable strictness**: Lenient, Moderate, or Strict review standards
@@ -62,8 +78,8 @@ The AI Paper Reviewer plugin acts as an automated program committee member, prov
 - **Auto-review**: Automatically review new submissions
 - **Review history**: View all AI reviews with filtering
 - **Admin dashboard**: Statistics, job status, and recent reviews
-- **Cost tracking**: Track token usage and estimated costs per review (v1.14.0+)
-- **Budget limits**: Set spending caps with automatic pause when exceeded (v1.14.0+)
+- **Cost tracking**: Track token usage and estimated costs per review
+- **Budget limits**: Set spending caps with automatic pause when exceeded
 
 ### Privacy Features
 
@@ -98,14 +114,15 @@ The AI Paper Reviewer plugin acts as an automated program committee member, prov
 
 | Setting | Description |
 |---------|-------------|
-| **AI Provider** | OpenAI, Anthropic, or Gemini |
+| **AI Provider** | Gemini (recommended), OpenAI, or Anthropic |
 | **API Key** | Your provider's API key (stored encrypted) |
 
 ### Review Style Settings
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| **Model** | gpt-4o | AI model to use (options loaded from provider) |
+| **Model** | gemini-2.0-flash | AI model to use (options loaded from provider) |
+| **Enable Web Search** | Yes | Allow Gemini to search web for fact-checking (Gemini only) |
 | **Review Strictness** | Moderate | How critical the AI should be |
 | **Use Event Criteria** | Yes | Match reviews to event's scoring criteria |
 
@@ -297,6 +314,7 @@ Access via **Admin > Plugins > AI Reviews > Dashboard**
 |-----------|------|-------|
 | Submission title | Yes | Required for analysis |
 | Abstract | Yes | Required for analysis |
+| Full talk description | Yes | Detailed content (v1.26.0+) |
 | Outline | Yes | If provided |
 | Target audience | Yes | If provided |
 | Prerequisites | Yes | If provided |
@@ -371,6 +389,22 @@ The plugin creates a non-privileged service account to author reviews:
 ---
 
 ## Changelog
+
+### v1.26.0
+- **Bug fix**: Include full talk description in AI review
+  - AI now sees the "Full Talk Description" content (was missing)
+  - Better context for comprehensive reviews
+
+### v1.25.0
+- **Google Search grounding for Gemini**: Fact-check recent events, vulnerabilities, and claims
+- **Gemini now default/recommended provider**: With "Recommended" badge in onboarding
+- Default model changed to gemini-2.0-flash
+- Added `enableWebSearch` config option
+- Comprehensive provider tests added
+
+### v1.24.0
+- Reduced verbose logging (DEBUG level for most logs)
+- Dashboard stats fixes
 
 ### v1.14.0
 - Added cost tracking: token usage and estimated costs per review

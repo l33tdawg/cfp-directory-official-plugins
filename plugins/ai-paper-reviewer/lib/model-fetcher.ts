@@ -6,8 +6,8 @@
  */
 
 export interface ModelOption {
-  value: string;
-  label: string;
+  id: string;
+  name: string;
   description?: string;
   recommended?: boolean;
 }
@@ -124,8 +124,8 @@ export async function fetchOpenAIModels(apiKey: string): Promise<FetchModelsResu
       )
       .sort((a, b) => b.created - a.created) // Newest first
       .map((m) => ({
-        value: m.id,
-        label: formatOpenAIModelLabel(m.id),
+        id: m.id,
+        name: formatOpenAIModelLabel(m.id),
         description: `Created ${new Date(m.created * 1000).toLocaleDateString()}`,
         recommended: OPENAI_RECOMMENDED_MODELS.includes(m.id),
       }));
@@ -137,10 +137,10 @@ export async function fetchOpenAIModels(apiKey: string): Promise<FetchModelsResu
       return 0;
     });
 
-    // Add "(Recommended)" to label for recommended models
+    // Add "(Recommended)" to name for recommended models
     const models = filteredModels.map((m) => ({
       ...m,
-      label: m.recommended ? `${m.label} (Recommended)` : m.label,
+      name: m.recommended ? `${m.name} (Recommended)` : m.name,
     }));
 
     return { success: true, models };
@@ -222,8 +222,8 @@ export async function fetchAnthropicModels(apiKey: string): Promise<FetchModelsR
     const models = data.data.map((m) => {
       const isRecommended = ANTHROPIC_RECOMMENDED_MODELS.includes(m.id);
       return {
-        value: m.id,
-        label: isRecommended ? `${m.display_name} (Recommended)` : m.display_name,
+        id: m.id,
+        name: isRecommended ? `${m.display_name} (Recommended)` : m.display_name,
         description: `Released ${new Date(m.created_at).toLocaleDateString()}`,
         recommended: isRecommended,
       };
@@ -326,8 +326,8 @@ export async function fetchGeminiModels(apiKey: string): Promise<FetchModelsResu
         const modelId = m.baseModelId || m.name.replace('models/', '');
         const isRecommended = GEMINI_RECOMMENDED_MODELS.some((r) => modelId.includes(r));
         return {
-          value: modelId,
-          label: isRecommended ? `${m.displayName} (Recommended)` : m.displayName,
+          id: modelId,
+          name: isRecommended ? `${m.displayName} (Recommended)` : m.displayName,
           description:
             m.description ||
             `${m.inputTokenLimit?.toLocaleString() || '?'} input / ${m.outputTokenLimit?.toLocaleString() || '?'} output tokens`,
@@ -337,7 +337,7 @@ export async function fetchGeminiModels(apiKey: string): Promise<FetchModelsResu
 
     // Remove duplicates (some models appear multiple times with different versions)
     const uniqueModels = filteredModels.filter(
-      (m, i, arr) => arr.findIndex((x) => x.value === m.value) === i
+      (m, i, arr) => arr.findIndex((x) => x.id === m.id) === i
     );
 
     // Sort recommended models first

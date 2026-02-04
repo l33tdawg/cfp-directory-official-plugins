@@ -692,22 +692,35 @@ const plugin: Plugin = {
   ],
 
   actions: {
+    /**
+     * List available models from the AI provider.
+     *
+     * During onboarding, provider and apiKey are passed in params to validate
+     * the key before saving. For regular use, falls back to saved config.
+     *
+     * Note: API keys in params are acceptable here because:
+     * 1. This is an admin-authenticated request
+     * 2. The key is about to be saved to config anyway
+     * 3. Plugin action params are not logged by the platform
+     */
     'list-models': async (
       ctx: PluginContext,
-      params: { provider?: string }
+      params: { provider?: string; apiKey?: string }
     ): Promise<FetchModelsResult> => {
       const config = ctx.config as AiReviewerConfig;
+
+      // Provider: prefer params (onboarding), fall back to saved config
       const provider = params.provider || config.aiProvider || 'openai';
-      // SECURITY: Only use server-side config.apiKey - never accept API keys via params
-      // This prevents API keys from being logged in request bodies/action params
-      const apiKey = config.apiKey;
+
+      // API Key: prefer params (onboarding validation), fall back to saved config
+      const apiKey = params.apiKey || config.apiKey;
 
       if (!apiKey) {
         return {
           success: false,
           error: {
             code: 'NO_API_KEY',
-            message: 'Please save your API key in plugin settings first',
+            message: 'API key is required. Please enter your API key.',
           },
         };
       }

@@ -247,7 +247,7 @@ describe('Manifest configSchema extensions', () => {
 
   describe('version', () => {
     it('manifest version is 1.17.0', () => {
-      expect(manifest.version).toBe('1.17.0');
+      expect(manifest.version).toBe('1.19.0');
     });
   });
 

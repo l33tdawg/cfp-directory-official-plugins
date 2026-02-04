@@ -80,7 +80,7 @@ describe('Model Fetcher', () => {
       expect(result.models).toBeDefined();
 
       // Should include chat models
-      const modelIds = result.models!.map((m) => m.value);
+      const modelIds = result.models!.map((m) => m.id);
       expect(modelIds).toContain('gpt-4o');
       expect(modelIds).toContain('gpt-4o-mini');
       expect(modelIds).toContain('gpt-3.5-turbo');
@@ -111,11 +111,11 @@ describe('Model Fetcher', () => {
       const result = await fetchOpenAIModels('valid-key');
       expect(result.success).toBe(true);
 
-      const gpt4o = result.models!.find((m) => m.value === 'gpt-4o');
-      expect(gpt4o?.label).toContain('(Recommended)');
+      const gpt4o = result.models!.find((m) => m.id === 'gpt-4o');
+      expect(gpt4o?.name).toContain('(Recommended)');
 
-      const gpt35 = result.models!.find((m) => m.value === 'gpt-3.5-turbo');
-      expect(gpt35?.label).not.toContain('(Recommended)');
+      const gpt35 = result.models!.find((m) => m.id === 'gpt-3.5-turbo');
+      expect(gpt35?.name).not.toContain('(Recommended)');
     });
 
     it('should handle network errors', async () => {
@@ -180,9 +180,9 @@ describe('Model Fetcher', () => {
       expect(result.success).toBe(true);
       expect(result.models).toHaveLength(2);
 
-      const sonnet = result.models!.find((m) => m.value === 'claude-sonnet-4-20250514');
-      expect(sonnet?.label).toContain('Claude Sonnet 4');
-      expect(sonnet?.label).toContain('(Recommended)');
+      const sonnet = result.models!.find((m) => m.id === 'claude-sonnet-4-20250514');
+      expect(sonnet?.name).toContain('Claude Sonnet 4');
+      expect(sonnet?.name).toContain('(Recommended)');
     });
 
     it('should send correct headers', async () => {
@@ -265,7 +265,7 @@ describe('Model Fetcher', () => {
       const result = await fetchGeminiModels('valid-key');
       expect(result.success).toBe(true);
 
-      const modelIds = result.models!.map((m) => m.value);
+      const modelIds = result.models!.map((m) => m.id);
       expect(modelIds).toContain('gemini-2.0-flash');
       expect(modelIds).toContain('gemini-1.5-pro');
       expect(modelIds).not.toContain('embedding-001');
@@ -319,7 +319,7 @@ describe('Model Fetcher', () => {
       expect(result.success).toBe(true);
 
       // Should only have one entry for gemini-2.0-flash
-      const flashModels = result.models!.filter((m) => m.value === 'gemini-2.0-flash');
+      const flashModels = result.models!.filter((m) => m.id === 'gemini-2.0-flash');
       expect(flashModels).toHaveLength(1);
     });
   });

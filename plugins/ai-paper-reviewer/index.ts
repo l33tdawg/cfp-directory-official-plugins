@@ -1077,6 +1077,42 @@ export async function handleAiReviewJob(
     }
   }
 
+  // Create or get existing ai_review record for tracking in dashboard
+  let aiReviewId: string | undefined;
+  const startTime = Date.now();
+
+  if (eventId && ctx.aiReviews) {
+    try {
+      // Check if an ai_review already exists for this submission
+      const existingAiReview = await ctx.aiReviews.get(submissionId);
+
+      if (existingAiReview) {
+        aiReviewId = existingAiReview.id;
+        // Update status to processing for re-reviews
+        await ctx.aiReviews.update(aiReviewId, {
+          status: 'processing',
+          error_message: null,
+        });
+        ctx.logger.info('Updating existing ai_review record', { aiReviewId, submissionId });
+      } else {
+        // Create new ai_review record
+        const newAiReview = await ctx.aiReviews.create({
+          submissionId,
+          eventId,
+        });
+        aiReviewId = newAiReview.id;
+        await ctx.aiReviews.update(aiReviewId, { status: 'processing' });
+        ctx.logger.info('Created ai_review record', { aiReviewId, submissionId });
+      }
+    } catch (err) {
+      ctx.logger.warn('Failed to create/update ai_review record', {
+        submissionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Continue - this is not fatal, the core review will still be created
+    }
+  }
+
   try {
     // 1. Fetch event criteria if useEventCriteria is enabled
     let criteria: ReviewCriterion[] = [];
@@ -1360,6 +1396,44 @@ export async function handleAiReviewJob(
       });
     }
 
+    // 8. Update ai_reviews record with full results for dashboard tracking
+    if (aiReviewId && ctx.aiReviews) {
+      try {
+        const processingTimeMs = Date.now() - startTime;
+        await ctx.aiReviews.update(aiReviewId, {
+          review_id: reviewId || null,
+          criteria_scores: result.criteriaScores,
+          overall_score: result.overallScore,
+          summary: result.summary,
+          strengths: result.strengths,
+          weaknesses: result.weaknesses,
+          suggestions: result.suggestions,
+          recommendation: result.recommendation,
+          confidence: result.confidence,
+          similar_submissions: result.similarSubmissions || null,
+          model_used: config.model || 'gpt-4o',
+          provider: config.aiProvider || 'openai',
+          input_tokens: usage.inputTokens,
+          output_tokens: usage.outputTokens,
+          cost_usd: costUsd,
+          processing_time_ms: processingTimeMs,
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          error_message: null,
+        });
+        ctx.logger.info('Updated ai_review record with results', {
+          aiReviewId,
+          submissionId,
+          status: 'completed',
+        });
+      } catch (err) {
+        ctx.logger.warn('Failed to update ai_review record', {
+          aiReviewId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     // Get eventSlug from payload for linking
     const eventSlug = payload.eventSlug as string | undefined;
 
@@ -1385,6 +1459,24 @@ export async function handleAiReviewJob(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     ctx.logger.error('AI review failed', { submissionId, error: message });
+
+    // Update ai_review record with failed status
+    if (aiReviewId && ctx.aiReviews) {
+      try {
+        const processingTimeMs = Date.now() - startTime;
+        await ctx.aiReviews.update(aiReviewId, {
+          status: 'failed',
+          error_message: message,
+          processing_time_ms: processingTimeMs,
+        });
+      } catch (updateErr) {
+        ctx.logger.warn('Failed to update ai_review with error status', {
+          aiReviewId,
+          error: updateErr instanceof Error ? updateErr.message : String(updateErr),
+        });
+      }
+    }
+
     return { success: false, error: message };
   }
 }

@@ -12,7 +12,6 @@ import {
   callGemini,
   callProvider,
   type ProviderOptions,
-  type ProviderResponse,
 } from '../../plugins/ai-paper-reviewer/lib/providers';
 
 // =============================================================================

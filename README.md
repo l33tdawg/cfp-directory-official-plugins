@@ -6,8 +6,8 @@ Official plugin repository for [CFP Directory](https://github.com/l33tdawg/cfp-d
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [AI Paper Reviewer](plugins/ai-paper-reviewer/) | 1.7.1 | Intelligent submission analysis with event-aware criteria, duplicate detection, confidence thresholds, core review integration, and service account support |
-| [Example: Webhook Notifications](plugins/example-webhook/) | 1.0.0 | A starter template for plugin developers demonstrating hooks, config schemas, HMAC signatures, and background job retries |
+| [AI Paper Reviewer](plugins/ai-paper-reviewer/) | 1.28.0 | Intelligent submission analysis with cost tracking, budget management, speaker context, criteria-based scoring, and Google Search grounding for fact-checking |
+| [Example: Webhook Notifications](plugins/example-webhook/) | 1.1.0 | A starter template for plugin developers demonstrating hooks, config schemas, HMAC signatures, and background job retries |
 
 ## How It Works
 
@@ -97,7 +97,7 @@ This allows plugins to provide interactive admin UIs without requiring runtime t
 
 1. Update the plugin version in `manifest.json` and `registry.json`
 2. Run `./scripts/build-archives.sh`
-3. Create a GitHub release tagged as `<plugin-name>-v<version>` (e.g., `ai-paper-reviewer-v1.1.0`)
+3. Create a GitHub release tagged as `v<version>` (e.g., `v1.28.0`)
 4. Attach the zip from `dist/` to the release
 
 ## Adding a New Plugin

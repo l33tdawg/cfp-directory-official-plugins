@@ -1263,7 +1263,7 @@ export async function handleAiReviewJob(
     });
 
     // 5. Call AI with temperature and parse with retry
-    const { result, inputTruncated, usage, costUsd } = await callAiProvider(config, submissionText, systemPrompt);
+    const { result, inputTruncated: _inputTruncated, usage, costUsd } = await callAiProvider(config, submissionText, systemPrompt);
 
     // 6. Attach similar submissions to result
     if (similarSubmissions.length > 0) {

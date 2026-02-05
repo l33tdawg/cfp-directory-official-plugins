@@ -685,7 +685,7 @@ const plugin: Plugin = {
 
   adminPages: [
     {
-      path: '/',
+      path: '/dashboard',
       title: 'Dashboard',
       component: AdminDashboard,
     },

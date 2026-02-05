@@ -149,7 +149,12 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.28.0 (Current)
+### v1.29.0 (Current)
+- **Fix: Admin pages now bundled in manifest** - Dashboard, Review History, and Personas pages now properly declared in manifest.json for platform discovery
+- **Fix: Dynamic model loading in configuration** - Model selector now properly passes API key to fetch models dynamically from provider (up to 10 models)
+- **Fix: Admin page path mismatch** - Dashboard path aligned with sidebar navigation
+
+### v1.28.0
 - Standardized version tagging to `v<version>` format
 - Updated README with current version
 

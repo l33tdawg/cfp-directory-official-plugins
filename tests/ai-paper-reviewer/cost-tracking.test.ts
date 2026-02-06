@@ -365,36 +365,8 @@ describe('Cost Tracking', () => {
   // Budget Configuration Tests
   // ==========================================================================
 
-  describe('Budget Configuration Schema', () => {
-    it('should have budget settings in manifest', async () => {
-      const manifest = await import('../../plugins/ai-paper-reviewer/manifest.json');
-      const props = manifest.configSchema.properties;
-
-      expect(props.budgetLimit).toBeDefined();
-      expect(props.budgetLimit.type).toBe('number');
-      expect(props.budgetLimit.default).toBe(0);
-      expect(props.budgetLimit.minimum).toBe(0);
-
-      expect(props.budgetAlertThreshold).toBeDefined();
-      expect(props.budgetAlertThreshold.type).toBe('number');
-      expect(props.budgetAlertThreshold.default).toBe(80);
-      expect(props.budgetAlertThreshold.minimum).toBe(50);
-      expect(props.budgetAlertThreshold.maximum).toBe(100);
-
-      expect(props.pauseOnBudgetExceeded).toBeDefined();
-      expect(props.pauseOnBudgetExceeded.type).toBe('boolean');
-      expect(props.pauseOnBudgetExceeded.default).toBe(true);
-    });
-
-    it('should have budget group in x-groups', async () => {
-      const manifest = await import('../../plugins/ai-paper-reviewer/manifest.json');
-      const groups = manifest.configSchema['x-groups'];
-
-      expect(groups.budget).toBeDefined();
-      expect(groups.budget.title).toBe('Cost & Budget');
-    });
-
-    it('should have reset-budget action', async () => {
+  describe('Budget Configuration', () => {
+    it('should have reset-budget action in manifest', async () => {
       const manifest = await import('../../plugins/ai-paper-reviewer/manifest.json');
       const actions = manifest.actions;
 
@@ -403,13 +375,21 @@ describe('Cost Tracking', () => {
       expect(resetAction.title).toBe('Reset Budget');
     });
 
-    it('should have get-cost-stats action', async () => {
+    it('should have get-cost-stats action in manifest', async () => {
       const manifest = await import('../../plugins/ai-paper-reviewer/manifest.json');
       const actions = manifest.actions;
 
       const statsAction = actions.find((a: { name: string }) => a.name === 'get-cost-stats');
       expect(statsAction).toBeDefined();
       expect(statsAction.title).toBe('Get Cost Statistics');
+    });
+
+    it('should have save-settings and get-settings actions in manifest', async () => {
+      const manifest = await import('../../plugins/ai-paper-reviewer/manifest.json');
+      const actions = manifest.actions;
+
+      expect(actions.find((a: { name: string }) => a.name === 'save-settings')).toBeDefined();
+      expect(actions.find((a: { name: string }) => a.name === 'get-settings')).toBeDefined();
     });
   });
 

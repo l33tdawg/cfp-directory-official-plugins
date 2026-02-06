@@ -1,7 +1,7 @@
 {
   "name": "ai-paper-reviewer",
   "displayName": "AI Paper Reviewer",
-  "version": "1.29.0",
+  "version": "1.30.0",
   "apiVersion": "1.0",
   "description": "Intelligent submission analysis with cost tracking, budget management, speaker context, criteria-based scoring, and Google Search grounding for fact-checking",
   "author": "CFP Directory",
@@ -42,6 +42,16 @@
       "name": "get-cost-stats",
       "title": "Get Cost Statistics",
       "description": "Returns current spending, budget status, and cost breakdown"
+    },
+    {
+      "name": "save-settings",
+      "title": "Save Settings",
+      "description": "Saves plugin configuration to plugin data store"
+    },
+    {
+      "name": "get-settings",
+      "title": "Get Settings",
+      "description": "Returns current plugin configuration (API key masked)"
     }
   ],
   "sidebarItems": [
@@ -66,6 +76,12 @@
           "label": "Reviewer Personas",
           "path": "/personas",
           "icon": "Sparkles"
+        },
+        {
+          "key": "settings",
+          "label": "Settings",
+          "path": "/settings",
+          "icon": "Settings"
         }
       ]
     }
@@ -85,220 +101,11 @@
       "path": "/personas",
       "title": "Reviewer Personas",
       "component": "AdminPersonas"
+    },
+    {
+      "path": "/settings",
+      "title": "Settings",
+      "component": "AdminSettings"
     }
-  ],
-  "configSchema": {
-    "type": "object",
-    "x-groups": {
-      "provider": { "title": "AI Provider", "description": "Connect to your AI service", "order": 0 },
-      "review": { "title": "Review Style", "description": "Customize how reviews are generated", "order": 1 },
-      "automation": { "title": "Automation", "description": "Control when reviews happen", "order": 2 },
-      "budget": { "title": "Cost & Budget", "description": "Track spending and set budget limits", "order": 3 },
-      "detection": { "title": "Quality Checks", "description": "Optional duplicate detection", "order": 4, "collapsed": true },
-      "advanced": { "title": "Advanced Settings", "description": "Fine-tune technical parameters (most users can ignore this)", "order": 5, "collapsed": true }
-    },
-    "properties": {
-      "aiProvider": {
-        "type": "string",
-        "title": "AI Provider",
-        "description": "Select your AI provider",
-        "enum": ["gemini", "openai", "anthropic"],
-        "default": "gemini",
-        "x-group": "provider",
-        "x-enum-labels": {
-          "gemini": "Google Gemini (Recommended)",
-          "openai": "OpenAI",
-          "anthropic": "Anthropic Claude"
-        },
-        "x-friendly-hint": "Gemini is recommended as it includes Google Search grounding for fact-checking recent events and claims at no extra cost. OpenAI and Anthropic produce excellent reviews but cannot verify facts against current information."
-      },
-      "apiKey": {
-        "type": "string",
-        "title": "API Key",
-        "description": "Your API key from the selected provider",
-        "format": "password",
-        "x-group": "provider",
-        "x-friendly-hint": "Get this from your provider's dashboard (OpenAI, Anthropic, or Google Cloud). Stored securely and never shared."
-      },
-      "enableWebSearch": {
-        "type": "boolean",
-        "title": "Enable Web Search (Grounding)",
-        "description": "Allow AI to search the web for fact-checking",
-        "default": true,
-        "x-group": "provider",
-        "x-depends-on": ["aiProvider"],
-        "x-visible-when": { "aiProvider": "gemini" },
-        "x-friendly-hint": "When enabled, Gemini can verify claims about recent events, security vulnerabilities, tools, and more using Google Search. Highly recommended for security/tech conferences."
-      },
-      "model": {
-        "type": "string",
-        "title": "Model",
-        "description": "AI model for generating reviews",
-        "default": "gemini-2.0-flash",
-        "x-group": "provider",
-        "x-depends-on": ["aiProvider", "apiKey"],
-        "x-friendly-hint": "Available models load from your provider. Recommended models are marked.",
-        "x-options-api": {
-          "action": "list-models",
-          "params": { "provider": "${aiProvider}", "apiKey": "${apiKey}" },
-          "dependsOnFields": ["aiProvider", "apiKey"],
-          "cacheSeconds": 300,
-          "loadingText": "Loading models...",
-          "errorBehavior": "show-error-with-fallback"
-        },
-        "x-options": {
-          "gemini": [
-            { "value": "gemini-2.0-flash", "label": "Gemini 2.0 Flash (Recommended)", "description": "Fast, capable, with Google Search grounding" },
-            { "value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro", "description": "Most capable, with Google Search grounding" },
-            { "value": "gemini-1.5-pro", "label": "Gemini 1.5 Pro", "description": "Previous generation, still excellent" }
-          ],
-          "openai": [
-            { "value": "gpt-4o", "label": "GPT-4o (Recommended)", "description": "Best quality and speed" },
-            { "value": "gpt-4o-mini", "label": "GPT-4o Mini", "description": "Faster, lower cost" }
-          ],
-          "anthropic": [
-            { "value": "claude-sonnet-4-20250514", "label": "Claude Sonnet 4 (Recommended)", "description": "Excellent quality" },
-            { "value": "claude-haiku-4-20250514", "label": "Claude Haiku 4", "description": "Faster, lower cost" }
-          ]
-        }
-      },
-      "strictnessLevel": {
-        "type": "string",
-        "title": "Review Strictness",
-        "description": "How critical should the AI be?",
-        "enum": ["lenient", "moderate", "strict"],
-        "default": "moderate",
-        "x-group": "review",
-        "x-friendly-hint": "Lenient: Encouraging and supportive. Moderate: Balanced feedback. Strict: High standards, detailed critiques."
-      },
-      "useEventCriteria": {
-        "type": "boolean",
-        "title": "Use Event's Review Criteria",
-        "description": "Match reviews to your event's specific scoring criteria",
-        "default": true,
-        "x-group": "review",
-        "x-friendly-hint": "When enabled, reviews follow the criteria you've set up for your event. Highly recommended."
-      },
-      "autoReview": {
-        "type": "boolean",
-        "title": "Auto-Review New Submissions",
-        "description": "Automatically review submissions when they come in",
-        "default": true,
-        "x-group": "automation",
-        "x-friendly-hint": "Enable for hands-off operation. Disable to manually trigger reviews from the dashboard."
-      },
-      "enableDuplicateDetection": {
-        "type": "boolean",
-        "title": "Detect Similar Submissions",
-        "description": "Flag potential duplicate or overlapping submissions",
-        "default": true,
-        "x-group": "detection",
-        "x-friendly-hint": "Helps identify when multiple submissions cover the same topic."
-      },
-      "duplicateThreshold": {
-        "type": "number",
-        "title": "Similarity Threshold",
-        "description": "How similar submissions need to be before flagging (0.5-0.95)",
-        "default": 0.7,
-        "minimum": 0.5,
-        "maximum": 0.95,
-        "x-group": "detection",
-        "x-display": "slider",
-        "x-labels": { "0.5": "Catch more", "0.7": "Balanced", "0.95": "Only obvious" },
-        "x-friendly-hint": "Lower = more flags (may include false positives). Higher = only very similar submissions."
-      },
-      "showAiReviewerOnTeamPage": {
-        "type": "boolean",
-        "title": "Show AI Reviewer Publicly",
-        "description": "List the AI reviewer on your public team page",
-        "default": false,
-        "x-group": "automation",
-        "x-friendly-hint": "Enable if you want speakers to know AI is part of your review process."
-      },
-      "budgetLimit": {
-        "type": "number",
-        "title": "Monthly Budget Limit (USD)",
-        "description": "Maximum monthly spend on AI reviews (0 = unlimited)",
-        "default": 0,
-        "minimum": 0,
-        "x-group": "budget",
-        "x-friendly-hint": "Set a spending cap to control costs. Reviews will pause when the budget is reached. Reset manually from the dashboard."
-      },
-      "budgetAlertThreshold": {
-        "type": "number",
-        "title": "Budget Alert Threshold (%)",
-        "description": "Show warning when spending reaches this percentage of budget",
-        "default": 80,
-        "minimum": 50,
-        "maximum": 100,
-        "x-group": "budget",
-        "x-display": "slider",
-        "x-labels": { "50": "50%", "80": "80%", "100": "100%" },
-        "x-friendly-hint": "Get notified on the dashboard when you're approaching your budget limit."
-      },
-      "pauseOnBudgetExceeded": {
-        "type": "boolean",
-        "title": "Pause Reviews When Budget Exceeded",
-        "description": "Stop auto-reviews when budget limit is reached",
-        "default": true,
-        "x-group": "budget",
-        "x-friendly-hint": "When enabled, new submissions won't be auto-reviewed once you hit your budget. You can still trigger manual reviews."
-      },
-      "temperature": {
-        "type": "number",
-        "title": "Response Variability",
-        "description": "How varied the AI's responses should be (0 = consistent, 1 = creative)",
-        "default": 0.3,
-        "minimum": 0,
-        "maximum": 1,
-        "x-group": "advanced",
-        "x-display": "slider",
-        "x-labels": { "0": "Consistent", "0.5": "Balanced", "1": "Creative" },
-        "x-friendly-hint": "Default (0.3) produces reliable, consistent reviews. Increase for more varied feedback."
-      },
-      "confidenceThreshold": {
-        "type": "number",
-        "title": "Confidence Threshold",
-        "description": "Flag reviews when AI confidence is below this level",
-        "default": 0.5,
-        "minimum": 0,
-        "maximum": 1,
-        "x-group": "advanced",
-        "x-display": "slider",
-        "x-labels": { "0": "Show all", "0.5": "Default", "1": "High only" },
-        "x-friendly-hint": "Low-confidence reviews are shown with a warning. Increase to be more selective."
-      },
-      "reReviewCooldownMinutes": {
-        "type": "number",
-        "title": "Re-review Cooldown (minutes)",
-        "description": "Wait time before auto-reviewing an edited submission",
-        "default": 5,
-        "minimum": 1,
-        "maximum": 60,
-        "x-group": "advanced",
-        "x-friendly-hint": "Prevents excessive API calls when authors make rapid edits."
-      },
-      "maxTokens": {
-        "type": "number",
-        "title": "Maximum Response Tokens",
-        "description": "Maximum tokens for AI response (100-16384)",
-        "default": 4096,
-        "minimum": 100,
-        "maximum": 16384,
-        "x-group": "advanced",
-        "x-friendly-hint": "Controls AI response length and cost. Default (4096) is sufficient for most reviews."
-      },
-      "maxInputChars": {
-        "type": "number",
-        "title": "Maximum Input Characters",
-        "description": "Maximum submission text size sent to AI (1000-100000)",
-        "default": 50000,
-        "minimum": 1000,
-        "maximum": 100000,
-        "x-group": "advanced",
-        "x-friendly-hint": "Long submissions are truncated to this limit. Default handles most submissions."
-      }
-    },
-    "required": ["apiKey"]
-  }
+  ]
 }

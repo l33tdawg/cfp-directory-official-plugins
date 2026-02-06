@@ -209,12 +209,35 @@ export function AiReviewPanel({ context, data }: PluginComponentProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showOverridden, setShowOverridden] = useState(false);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.6);
+  const [lowConfidenceBehavior, setLowConfidenceBehavior] = useState('warn');
 
   const submissionId = data?.submissionId as string | undefined;
 
-  // Config from plugin context
-  const confidenceThreshold = (context.config.confidenceThreshold as number) ?? 0.6;
-  const lowConfidenceBehavior = (context.config.lowConfidenceBehavior as string) ?? 'warn';
+  // Load settings from plugin data
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const response = await context.api.fetch('/actions/get-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const settingsData = await response.json();
+        if (settingsData.success && settingsData.config) {
+          if (typeof settingsData.config.confidenceThreshold === 'number') {
+            setConfidenceThreshold(settingsData.config.confidenceThreshold);
+          }
+          if (typeof settingsData.config.lowConfidenceBehavior === 'string') {
+            setLowConfidenceBehavior(settingsData.config.lowConfidenceBehavior);
+          }
+        }
+      } catch {
+        // Use defaults
+      }
+    }
+    loadSettings();
+  }, [context.api]);
 
   useEffect(() => {
     if (!submissionId) {

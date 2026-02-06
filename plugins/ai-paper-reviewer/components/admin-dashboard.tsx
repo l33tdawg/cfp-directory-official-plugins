@@ -286,8 +286,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   // Allow actions when status is unknown (null) - server will validate
   const hasApiKey = apiKeyConfigured === true;
   const apiKeyStatusKnown = apiKeyConfigured !== null;
-  const provider = (context.config.aiProvider as string) || 'openai';
-  const model = (context.config.model as string) || 'gpt-4o';
+  const [provider, setProvider] = useState<string>('openai');
+  const [model, setModel] = useState<string>('gpt-4o');
 
   // Fetch only active jobs (for auto-refresh without full loading state)
   const fetchActiveJobs = useCallback(async () => {
@@ -406,8 +406,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
     setError(null);
 
     try {
-      // Fetch all job types, submissions, config status, and cost stats in parallel
-      const [pendingRes, runningRes, completedRes, failedRes, submissionsRes, configRes, costRes] = await Promise.all([
+      // Fetch all job types, submissions, config status, cost stats, and settings in parallel
+      const [pendingRes, runningRes, completedRes, failedRes, submissionsRes, configRes, costRes, settingsRes] = await Promise.all([
         context.api.fetch('/jobs?status=pending&type=ai-review&limit=100'),
         context.api.fetch('/jobs?status=running&type=ai-review&limit=100'),
         context.api.fetch('/jobs?status=completed&type=ai-review&limit=100'),
@@ -419,12 +419,26 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
         }),
+        context.api.fetch('/actions/get-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
       ]);
 
       // Check API key configuration status
       if (configRes.ok) {
         const configData = await configRes.json();
         setApiKeyConfigured(configData.value === true);
+      }
+
+      // Load provider/model from plugin settings
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        if (settingsData.success && settingsData.config) {
+          if (settingsData.config.aiProvider) setProvider(settingsData.config.aiProvider);
+          if (settingsData.config.model) setModel(settingsData.config.model);
+        }
       }
 
       // Fetch cost stats
@@ -1148,7 +1162,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                   Personas
                 </a>
                 <a
-                  href={`/organizations/${context.organizationId}/manage/plugins/${context.pluginName}`}
+                  href={`${pluginBasePath}/ai-paper-reviewer/settings`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
                   <Settings className="h-4 w-4" />

@@ -66,22 +66,39 @@ const PRESETS: Preset[] = [
 ];
 
 export function AdminPersonas({ context }: PluginComponentProps) {
-  const currentPersona = (context.config.customPersona as string) || '';
-
-  const [persona, setPersona] = useState(currentPersona);
+  const [currentPersona, setCurrentPersona] = useState('');
+  const [persona, setPersona] = useState('');
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Detect which preset is active based on current persona
+  // Load persona from plugin settings
   useEffect(() => {
-    const currentValue = (context.config.customPersona as string) || '';
-    setPersona(currentValue);
-
-    const matchingPreset = PRESETS.find((p) => p.persona === currentValue);
-    setActivePreset(matchingPreset?.id || null);
-  }, [context.config.customPersona]);
+    async function loadPersona() {
+      try {
+        const response = await context.api.fetch('/actions/get-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const data = await response.json();
+        if (data.success && data.config) {
+          const value = (data.config.customPersona as string) || '';
+          setCurrentPersona(value);
+          setPersona(value);
+          const matchingPreset = PRESETS.find((p) => p.persona === value);
+          setActivePreset(matchingPreset?.id || null);
+        }
+      } catch {
+        // Fall back to empty
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadPersona();
+  }, [context.api]);
 
   const handlePresetClick = (preset: Preset) => {
     setPersona(preset.persona);
@@ -103,33 +120,19 @@ export function AdminPersonas({ context }: PluginComponentProps) {
     setError(null);
 
     try {
-      // Merge with existing config to preserve other settings
-      const updatedConfig = {
-        ...context.config,
-        customPersona: persona,
-      };
-
-      // Platform-agnostic config URL:
-      // - Main platform (has organizationId): /api/organizations/{orgId}/plugins/{pluginId}
-      // - Self-hosted (no organizationId): /api/admin/plugins/{pluginId}
-      const configUrl = 'organizationId' in context && context.organizationId
-        ? `/api/organizations/${context.organizationId}/plugins/${context.pluginId}`
-        : `/api/admin/plugins/${context.pluginId}`;
-
-      const response = await fetch(configUrl, {
-        method: 'PATCH',
+      const response = await context.api.fetch('/actions/save-settings', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          config: updatedConfig,
-        }),
+        body: JSON.stringify({ customPersona: persona }),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to save configuration');
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to save persona');
       }
 
+      setCurrentPersona(persona);
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err) {
@@ -141,6 +144,14 @@ export function AdminPersonas({ context }: PluginComponentProps) {
   };
 
   const hasChanges = persona !== currentPersona;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-600 dark:text-purple-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6" data-testid="admin-personas">

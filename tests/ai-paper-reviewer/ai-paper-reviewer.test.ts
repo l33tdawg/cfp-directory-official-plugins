@@ -51,6 +51,24 @@ import type { PluginContext } from '@/lib/plugins';
 // =============================================================================
 
 function createMockContext(config: Record<string, unknown> = {}): PluginContext {
+  // Build data.get mock that returns config from plugin data store
+  // getConfig() reads: data.get('settings', 'apiKey') and data.get('settings', 'general')
+  const { apiKey, ...generalSettings } = config;
+  const dataGetMock = vi.fn().mockImplementation(
+    (namespace: string, key: string) => {
+      if (namespace === 'settings' && key === 'apiKey') {
+        return Promise.resolve(apiKey ?? null);
+      }
+      if (namespace === 'settings' && key === 'general') {
+        return Promise.resolve(Object.keys(generalSettings).length > 0 ? generalSettings : null);
+      }
+      if (namespace === 'settings' && key === '_migrated') {
+        return Promise.resolve(true); // Skip migration in tests
+      }
+      return Promise.resolve(null);
+    }
+  );
+
   return {
     logger: {
       debug: vi.fn(),
@@ -58,13 +76,15 @@ function createMockContext(config: Record<string, unknown> = {}): PluginContext 
       warn: vi.fn(),
       error: vi.fn(),
     },
-    config,
+    config: {}, // Platform config no longer used — config comes from ctx.data
     jobs: {
       enqueue: vi.fn().mockResolvedValue('job-1'),
       getJob: vi.fn().mockResolvedValue(null),
       cancelJob: vi.fn().mockResolvedValue(true),
       getPendingCount: vi.fn().mockResolvedValue(0),
       getJobs: vi.fn().mockResolvedValue([]),
+      registerHandler: vi.fn(),
+      unregisterHandler: vi.fn(),
     },
     submissions: {
       get: vi.fn().mockResolvedValue(null),
@@ -72,7 +92,9 @@ function createMockContext(config: Record<string, unknown> = {}): PluginContext 
       update: vi.fn().mockResolvedValue({}),
       count: vi.fn().mockResolvedValue(0),
     } as any,
-    users: {} as any,
+    users: {
+      createServiceAccount: vi.fn().mockResolvedValue({ id: 'sa-1', email: 'ai@test.com', name: 'AI Paper Reviewer' }),
+    } as any,
     events: {
       get: vi.fn().mockResolvedValue(null),
       getBySlug: vi.fn().mockResolvedValue(null),
@@ -84,7 +106,7 @@ function createMockContext(config: Record<string, unknown> = {}): PluginContext 
     email: {} as any,
     data: {
       set: vi.fn().mockResolvedValue(undefined),
-      get: vi.fn().mockResolvedValue(null),
+      get: dataGetMock,
       list: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue(undefined),
       clear: vi.fn().mockResolvedValue(undefined),
@@ -608,9 +630,9 @@ describe('AI Paper Reviewer Plugin', () => {
 
     it('should register admin pages', async () => {
       const plugin = (await import('../../plugins/ai-paper-reviewer/index')).default;
-      expect(plugin.adminPages).toHaveLength(3);
+      expect(plugin.adminPages).toHaveLength(4);
 
-      const dashboardPage = plugin.adminPages!.find(p => p.path === '/');
+      const dashboardPage = plugin.adminPages!.find(p => p.path === '/dashboard');
       expect(dashboardPage).toBeDefined();
       expect(dashboardPage!.title).toBe('Dashboard');
 
@@ -621,6 +643,10 @@ describe('AI Paper Reviewer Plugin', () => {
       const personasPage = plugin.adminPages!.find(p => p.path === '/personas');
       expect(personasPage).toBeDefined();
       expect(personasPage!.title).toBe('Reviewer Personas');
+
+      const settingsPage = plugin.adminPages!.find(p => p.path === '/settings');
+      expect(settingsPage).toBeDefined();
+      expect(settingsPage!.title).toBe('Settings');
     });
 
     it('should queue AI review job on submission.created with eventId', async () => {

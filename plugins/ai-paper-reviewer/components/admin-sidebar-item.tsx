@@ -9,7 +9,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Bot, History, Sparkles } from 'lucide-react';
+import { Bot, History, Sparkles, Settings } from 'lucide-react';
 import type { PluginComponentProps } from '@/lib/plugins';
 
 interface NavLinkProps {
@@ -42,9 +42,11 @@ export function AiReviewerSidebarItem({ data }: PluginComponentProps) {
 
   const historyHref = `${pluginBasePath}/ai-paper-reviewer/history`;
   const personasHref = `${pluginBasePath}/ai-paper-reviewer/personas`;
+  const settingsHref = `${pluginBasePath}/ai-paper-reviewer/settings`;
 
   const isHistoryActive = pathname.startsWith(historyHref);
   const isPersonasActive = pathname.startsWith(personasHref);
+  const isSettingsActive = pathname.startsWith(settingsHref);
 
   return (
     <div className="pt-4 border-t border-slate-200 dark:border-slate-700" data-testid="ai-reviewer-sidebar">
@@ -66,6 +68,12 @@ export function AiReviewerSidebarItem({ data }: PluginComponentProps) {
           icon={<Sparkles className="h-4 w-4" />}
           label="Reviewer Personas"
           isActive={isPersonasActive}
+        />
+        <NavLink
+          href={settingsHref}
+          icon={<Settings className="h-4 w-4" />}
+          label="Settings"
+          isActive={isSettingsActive}
         />
       </nav>
     </div>

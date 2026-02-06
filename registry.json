@@ -9,7 +9,7 @@
     {
       "name": "ai-paper-reviewer",
       "displayName": "AI Paper Reviewer",
-      "version": "1.29.0",
+      "version": "1.30.0",
       "apiVersion": "1.0",
       "description": "Intelligent submission analysis with cost tracking, budget management, speaker context, criteria-based scoring, and Google Search grounding for fact-checking",
       "author": "CFP Directory",
@@ -32,56 +32,19 @@
           "items": [
             { "key": "dashboard", "label": "Dashboard", "path": "/dashboard", "icon": "LayoutDashboard" },
             { "key": "history", "label": "Review History", "path": "/history", "icon": "History" },
-            { "key": "personas", "label": "Reviewer Personas", "path": "/personas", "icon": "Sparkles" }
+            { "key": "personas", "label": "Reviewer Personas", "path": "/personas", "icon": "Sparkles" },
+            { "key": "settings", "label": "Settings", "path": "/settings", "icon": "Settings" }
           ]
         }
       ],
       "adminPages": [
         { "path": "/dashboard", "title": "Dashboard", "component": "AdminDashboard" },
         { "path": "/history", "title": "Review History", "component": "AdminReviewHistory" },
-        { "path": "/personas", "title": "Reviewer Personas", "component": "AdminPersonas" }
+        { "path": "/personas", "title": "Reviewer Personas", "component": "AdminPersonas" },
+        { "path": "/settings", "title": "Settings", "component": "AdminSettings" }
       ],
-      "configSchema": {
-        "type": "object",
-        "properties": {
-          "aiProvider": {
-            "type": "string",
-            "title": "AI Provider",
-            "enum": ["gemini", "openai", "anthropic"],
-            "default": "gemini"
-          },
-          "apiKey": {
-            "type": "string",
-            "title": "API Key",
-            "format": "password"
-          },
-          "model": {
-            "type": "string",
-            "title": "Model",
-            "default": "gemini-2.0-flash"
-          },
-          "autoReview": {
-            "type": "boolean",
-            "title": "Auto-Review New Submissions",
-            "default": true
-          },
-          "strictnessLevel": {
-            "type": "string",
-            "title": "Review Strictness",
-            "enum": ["lenient", "moderate", "strict"],
-            "default": "moderate"
-          },
-          "budgetLimit": {
-            "type": "number",
-            "title": "Monthly Budget Limit (USD)",
-            "default": 0,
-            "minimum": 0
-          }
-        },
-        "required": ["apiKey"]
-      },
-      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/v1.29.0/ai-paper-reviewer.zip",
-      "sha256": "e9977f09068c87a107d060786b66a8e17b8ae3b5d0169649a622edc4d04361e9"
+      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/v1.30.0/ai-paper-reviewer.zip",
+      "sha256": "e3eb75743277465902dc697e0df135468d792314fe25bb3119d4d4fc084bd28a"
     },
     {
       "name": "example-webhook",

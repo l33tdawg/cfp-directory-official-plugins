@@ -14,6 +14,7 @@ import { AiReviewerSidebarItem } from './components/admin-sidebar-item';
 import { AdminDashboard } from './components/admin-dashboard';
 import { AdminReviewHistory } from './components/admin-review-history';
 import { AdminPersonas } from './components/admin-personas';
+import { AdminSettings } from './components/admin-settings';
 import { buildSystemPrompt } from './lib/prompts';
 import type { ReviewCriterion, SimilarSubmissionInfo, EventContext } from './lib/prompts';
 import { callProvider, type TokenUsage } from './lib/providers';
@@ -22,46 +23,13 @@ import { findSimilarSubmissions } from './lib/similarity';
 import type { SimilarSubmission } from './lib/similarity';
 import { fetchModelsForProvider } from './lib/model-fetcher';
 import type { FetchModelsResult } from './lib/model-fetcher';
+import { getConfig, migrateFromPlatformConfig } from './lib/config';
+import type { AiReviewerConfig } from './lib/config';
 import manifestJson from './manifest.json';
 
 const manifest: PluginManifest = manifestJson as PluginManifest;
 
-// =============================================================================
-// CONFIGURATION
-// =============================================================================
-
-interface AiReviewerConfig {
-  aiProvider?: 'openai' | 'anthropic' | 'gemini';
-  apiKey?: string;
-  model?: string;
-  temperature?: number;
-  autoReview?: boolean;
-  useEventCriteria?: boolean;
-  strictnessLevel?: 'lenient' | 'moderate' | 'strict';
-  /** Custom persona - managed via the Personas page, not settings form */
-  customPersona?: string;
-  /** Review focus areas - internal use */
-  reviewFocus?: string[];
-  enableDuplicateDetection?: boolean;
-  duplicateThreshold?: number;
-  confidenceThreshold?: number;
-  /** Show AI reviewer on public team/reviewers page */
-  showAiReviewerOnTeamPage?: boolean;
-  /** Re-review cooldown in minutes */
-  reReviewCooldownMinutes?: number;
-  /** Maximum output tokens for AI response (default: 4096, max: 16384) */
-  maxTokens?: number;
-  /** Maximum input characters for submission text (default: 50000, max: 100000) */
-  maxInputChars?: number;
-  /** Monthly budget limit in USD (0 = unlimited) */
-  budgetLimit?: number;
-  /** Budget alert threshold (percentage, 0-100) */
-  budgetAlertThreshold?: number;
-  /** Pause auto-reviews when budget exceeded */
-  pauseOnBudgetExceeded?: boolean;
-  /** Enable web search/grounding for fact-checking (Gemini only) */
-  enableWebSearch?: boolean;
-}
+// AiReviewerConfig is imported from ./lib/config
 
 // =============================================================================
 // SECURITY CONSTANTS
@@ -469,7 +437,9 @@ const plugin: Plugin = {
   manifest,
 
   async onEnable(ctx: PluginContext) {
-    const config = ctx.config as AiReviewerConfig;
+    // Migrate config from platform to plugin data store (one-time)
+    await migrateFromPlatformConfig(ctx);
+    const config = await getConfig(ctx);
 
     // Register job handler for AI reviews
     ctx.logger.info('Attempting to register job handler', { hasJobs: !!ctx.jobs });
@@ -534,7 +504,7 @@ const plugin: Plugin = {
 
   hooks: {
     'submission.created': async (ctx, payload) => {
-      const config = ctx.config as AiReviewerConfig;
+      const config = await getConfig(ctx);
 
       // Update API key configuration status (for dashboard display)
       const hasApiKey = Boolean(config.apiKey);
@@ -573,7 +543,7 @@ const plugin: Plugin = {
     },
 
     'submission.updated': async (ctx, payload) => {
-      const config = ctx.config as AiReviewerConfig;
+      const config = await getConfig(ctx);
 
       // Update API key configuration status (for dashboard display)
       const hasApiKey = Boolean(config.apiKey);
@@ -699,6 +669,11 @@ const plugin: Plugin = {
       title: 'Reviewer Personas',
       component: AdminPersonas,
     },
+    {
+      path: '/settings',
+      title: 'Settings',
+      component: AdminSettings,
+    },
   ],
 
   actions: {
@@ -717,7 +692,7 @@ const plugin: Plugin = {
       ctx: PluginContext,
       params: { provider?: string; apiKey?: string }
     ): Promise<FetchModelsResult> => {
-      const config = ctx.config as AiReviewerConfig;
+      const config = await getConfig(ctx);
 
       // Provider: prefer params (onboarding), fall back to saved config
       const provider = params.provider || config.aiProvider || 'openai';
@@ -765,8 +740,10 @@ const plugin: Plugin = {
         // First, delete all ai_reviews records for this organization
         // This ensures the stats and review queue are reset properly
         let aiReviewsDeleted = 0;
+        let aiReviewsError: string | null = null;
         try {
           const allAiReviews = await ctx.aiReviews.list();
+          ctx.logger.info('Found ai_reviews to delete', { count: allAiReviews.length });
           for (const aiReview of allAiReviews) {
             try {
               await ctx.aiReviews.delete(aiReview.id);
@@ -780,8 +757,9 @@ const plugin: Plugin = {
           }
           ctx.logger.info('Deleted ai_reviews records', { count: aiReviewsDeleted });
         } catch (err) {
-          ctx.logger.warn('Failed to clear ai_reviews table', {
-            error: err instanceof Error ? err.message : String(err),
+          aiReviewsError = err instanceof Error ? err.message : String(err);
+          ctx.logger.error('Failed to list/clear ai_reviews table', {
+            error: aiReviewsError,
           });
         }
 
@@ -822,6 +800,16 @@ const plugin: Plugin = {
         }
 
         ctx.logger.info('Cleared AI reviews', { deletedCount, aiReviewsDeleted });
+
+        // If we couldn't list/delete ai_reviews, report it as an error
+        if (aiReviewsError) {
+          return {
+            success: false,
+            deletedCount,
+            aiReviewsDeleted,
+            error: `Failed to clear ai_reviews: ${aiReviewsError}. Core reviews cleared: ${deletedCount}`,
+          };
+        }
 
         return { success: true, deletedCount, aiReviewsDeleted };
       } catch (error) {
@@ -941,7 +929,7 @@ const plugin: Plugin = {
       error?: string;
     }> => {
       try {
-        const config = ctx.config as AiReviewerConfig;
+        const config = await getConfig(ctx);
         const budgetLimit = config.budgetLimit ?? 0;
 
         const existingStats = await ctx.data.get<CostStats>('costs', 'current-period');
@@ -975,6 +963,88 @@ const plugin: Plugin = {
         return { success: false, error: message };
       }
     },
+
+    'save-settings': async (
+      ctx: PluginContext,
+      params: Record<string, unknown>
+    ): Promise<{ success: boolean; config?: Record<string, unknown>; error?: string }> => {
+      try {
+        const { apiKey, ...rest } = params;
+
+        // Store API key encrypted separately
+        if (apiKey !== undefined && apiKey !== null) {
+          const keyValue = String(apiKey);
+          if (keyValue.length > 0) {
+            await ctx.data.set('settings', 'apiKey', keyValue, { encrypted: true });
+          }
+          // If empty string, we still keep the old key (don't delete on empty)
+        }
+
+        // Store all other settings as one JSON object
+        // Merge with existing general settings to support partial updates
+        const existing = await ctx.data.get<Record<string, unknown>>('settings', 'general') || {};
+        const general = { ...existing, ...rest };
+
+        // Remove apiKey from general if it leaked in
+        delete general.apiKey;
+
+        await ctx.data.set('settings', 'general', general);
+
+        // Update API key configured flag for dashboard
+        const storedKey = await ctx.data.get<string>('settings', 'apiKey');
+        await ctx.data.set('config', 'api-key-configured', Boolean(storedKey));
+
+        // Return config with masked API key
+        const masked = storedKey
+          ? `****${storedKey.slice(-4)}`
+          : undefined;
+
+        ctx.logger.info('Settings saved', {
+          provider: general.aiProvider,
+          model: general.model,
+          hasApiKey: Boolean(storedKey),
+        });
+
+        return {
+          success: true,
+          config: { ...general, apiKey: masked },
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.logger.error('Failed to save settings', { error: message });
+        return { success: false, error: message };
+      }
+    },
+
+    'get-settings': async (
+      ctx: PluginContext,
+      _params: Record<string, unknown>
+    ): Promise<{ success: boolean; config?: Record<string, unknown>; error?: string }> => {
+      try {
+        const [apiKey, general] = await Promise.all([
+          ctx.data.get<string>('settings', 'apiKey'),
+          ctx.data.get<Record<string, unknown>>('settings', 'general'),
+        ]);
+
+        // Mask API key — only show last 4 chars
+        const maskedKey = apiKey
+          ? `****${apiKey.slice(-4)}`
+          : undefined;
+
+        return {
+          success: true,
+          config: {
+            ...(general || {}),
+            apiKey: maskedKey,
+            _hasApiKey: Boolean(apiKey),
+          },
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.logger.error('Failed to get settings', { error: message });
+        return { success: false, error: message };
+      }
+    },
   },
 };
 
@@ -988,7 +1058,7 @@ export async function handleAiReviewJob(
   payload: Record<string, unknown>,
   ctx: PluginContext
 ): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
-  const config = ctx.config as AiReviewerConfig;
+  const config = await getConfig(ctx);
   const submissionId = payload.submissionId as string;
   let eventId = payload.eventId as string | undefined;
 

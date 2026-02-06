@@ -567,7 +567,7 @@ export function AdminOnboarding({ context, onComplete }: PluginComponentProps & 
     }
   }, [provider, apiKey, context.api]);
 
-  // Save configuration
+  // Save configuration via plugin's save-settings action
   const saveConfiguration = useCallback(async () => {
     if (!provider || !apiKey || !selectedModel) return;
 
@@ -575,38 +575,24 @@ export function AdminOnboarding({ context, onComplete }: PluginComponentProps & 
     setError(null);
 
     try {
-      // Build the config URL based on platform
-      const configUrl = 'organizationId' in context && context.organizationId
-        ? `/api/organizations/${context.organizationId}/plugins/${context.pluginId}`
-        : `/api/admin/plugins/${context.pluginId}`;
-
-      const response = await fetch(configUrl, {
-        method: 'PATCH',
+      const response = await context.api.fetch('/actions/save-settings', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
-          config: {
-            aiProvider: provider,
-            apiKey: apiKey,
-            model: selectedModel,
-            customPersona: customPersona,
-            autoReview: true, // Enable auto-review by default
-            useEventCriteria: true, // Use event criteria by default
-          },
+          aiProvider: provider,
+          apiKey: apiKey,
+          model: selectedModel,
+          customPersona: customPersona,
+          autoReview: true,
+          useEventCriteria: true,
         }),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to save configuration');
       }
-
-      // Mark API key as configured in plugin data
-      await context.api.fetch('/data/config/api-key-configured', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value: true }),
-      });
 
       // Notify parent that onboarding is complete
       onComplete();
@@ -615,7 +601,7 @@ export function AdminOnboarding({ context, onComplete }: PluginComponentProps & 
     } finally {
       setSaving(false);
     }
-  }, [provider, apiKey, selectedModel, customPersona, context, onComplete]);
+  }, [provider, apiKey, selectedModel, customPersona, context.api, onComplete]);
 
   const canProceed = () => {
     switch (step) {

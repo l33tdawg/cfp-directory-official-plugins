@@ -94,6 +94,7 @@ Access via **Admin > Plugins > AI Reviews**:
 - **Dashboard** - Review stats, job queue status, submission review queue, bulk actions
 - **History** - Complete history of AI reviews with scores and recommendations
 - **Personas** - Configure reviewer persona presets (Technical Expert, Business Analyst, etc.)
+- **Settings** - Full plugin configuration (provider, API key, model, budget, advanced options)
 
 ## Hooks
 
@@ -111,6 +112,8 @@ Access via **Admin > Plugins > AI Reviews**:
 | `delete-review` | Deletes a specific AI-generated review |
 | `reset-budget` | Resets the monthly spending counter to zero |
 | `get-cost-stats` | Returns current spending, budget status, and cost breakdown |
+| `save-settings` | Saves plugin configuration to plugin data store |
+| `get-settings` | Returns current plugin configuration (API key masked) |
 
 ## UI Components
 
@@ -128,18 +131,22 @@ Access via **Admin > Plugins > AI Reviews**:
 
 ```
 ai-paper-reviewer/
-├── manifest.json              # Plugin metadata and config schema
-├── index.ts                   # Plugin entry point, hooks, and job handler
+├── manifest.json              # Plugin metadata (no configSchema — plugin manages its own settings)
+├── index.ts                   # Plugin entry point, hooks, actions, and job handler
 ├── components/
 │   ├── ai-review-panel.tsx    # Review panel UI component
 │   ├── admin-sidebar-item.tsx # Sidebar navigation component
 │   ├── admin-dashboard.tsx    # Admin dashboard page
 │   ├── admin-review-history.tsx # Review history page
-│   └── admin-personas.tsx     # Persona configuration page
+│   ├── admin-personas.tsx     # Persona configuration page
+│   ├── admin-settings.tsx     # Settings configuration page
+│   └── admin-onboarding.tsx   # First-run setup wizard
 ├── lib/
+│   ├── config.ts              # Plugin config access and migration helpers
 │   ├── prompts.ts             # Dynamic prompt construction
 │   ├── providers.ts           # OpenAI, Anthropic, Gemini API abstraction
 │   ├── json-repair.ts         # JSON parse retry with AI-assisted repair
+│   ├── model-fetcher.ts       # Dynamic model list fetching from providers
 │   └── similarity.ts          # Jaccard similarity for duplicate detection
 └── dist/                      # Pre-compiled admin bundles (generated)
     ├── admin-pages.js
@@ -149,7 +156,14 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.29.0 (Current)
+### v1.30.0 (Current)
+- **Plugin-owned settings** - Configuration moved from platform-managed `configSchema` to plugin-owned data store via `save-settings` / `get-settings` actions
+- **Settings admin page** - Full settings UI with grouped sections: Provider, Review Style, Automation, Budget, Quality Checks, Advanced
+- **Config migration** - Existing deployments seamlessly migrate from platform config to plugin data on enable (one-time, automatic)
+- **Encrypted API key storage** - API keys stored encrypted in plugin data, masked in client responses
+- **Onboarding wizard** - First-run setup wizard guides new installations through provider selection, API key entry, and model configuration
+
+### v1.29.0
 - **Fix: Admin pages now bundled in manifest** - Dashboard, Review History, and Personas pages now properly declared in manifest.json for platform discovery
 - **Fix: Dynamic model loading in configuration** - Model selector now properly passes API key to fetch models dynamically from provider (up to 10 models)
 - **Fix: Admin page path mismatch** - Dashboard path aligned with sidebar navigation

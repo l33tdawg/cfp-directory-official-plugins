@@ -76,15 +76,15 @@ const mockContext: ClientPluginContext = {
   api: createMockApi('plugin-123'),
 };
 
+// Note: config values are no longer read from context.config
+// The dashboard fetches provider/model from get-settings action
 const mockContextWithApiKey: ClientPluginContext = {
   ...mockContext,
-  config: { apiKey: 'sk-test-key', aiProvider: 'openai', model: 'gpt-4o' },
   api: createMockApi('plugin-123'),
 };
 
 const mockContextGemini: ClientPluginContext = {
   ...mockContext,
-  config: { aiProvider: 'gemini', model: 'gemini-2.0-flash' },
   api: createMockApi('plugin-123'),
 };
 
@@ -175,6 +175,7 @@ function createFetchMock(overrides: Record<string, unknown> = {}) {
     submissions: { submissions: [], stats: { total: 0, reviewed: 0, pending: 0, unreviewed: 0 } },
     configValue: { value: true }, // Default to API key configured so dashboard shows
     costStats: { success: true, stats: null },
+    settings: { success: true, config: { aiProvider: 'openai', model: 'gpt-4o' } },
   };
 
   const data = { ...defaults, ...overrides };
@@ -216,6 +217,13 @@ function createFetchMock(overrides: Record<string, unknown> = {}) {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve(data.configValue),
+      } as Response);
+    }
+    // Settings action (get-settings)
+    if (urlStr.includes('/actions/get-settings')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(data.settings),
       } as Response);
     }
     // Cost stats action
@@ -311,9 +319,12 @@ describe('AdminDashboard', () => {
 
   describe('API Key Configuration Status', () => {
     it('should show "API Configured" when server flag indicates key is set', async () => {
-      // Component relies on server-side flag, not context.config.apiKey (security)
+      // Component relies on server-side flag and get-settings action for provider/model
       vi.spyOn(globalThis, 'fetch').mockImplementation(
-        createFetchMock({ configValue: { value: true } })
+        createFetchMock({
+          configValue: { value: true },
+          settings: { success: true, config: { aiProvider: 'openai', model: 'gpt-4o' } },
+        })
       );
 
       render(<AdminDashboard context={mockContextWithApiKey} data={{}} />);
@@ -366,10 +377,13 @@ describe('AdminDashboard', () => {
       });
     });
 
-    it('should display correct provider and model from config', async () => {
-      // Need API key to be configured to show provider/model
+    it('should display correct provider and model from settings', async () => {
+      // Provider/model now come from get-settings action, not context.config
       vi.spyOn(globalThis, 'fetch').mockImplementation(
-        createFetchMock({ configValue: { value: true } })
+        createFetchMock({
+          configValue: { value: true },
+          settings: { success: true, config: { aiProvider: 'gemini', model: 'gemini-2.0-flash' } },
+        })
       );
 
       render(<AdminDashboard context={mockContextGemini} data={{}} />);
@@ -744,8 +758,8 @@ describe('AdminDashboard', () => {
 
       await waitFor(() => {
         const settingsLink = screen.getByRole('link', { name: /Settings/ });
-        // Component uses context.pluginId for settings link
-        expect(settingsLink).toHaveAttribute('href', `/admin/plugins/${mockContext.pluginId}`);
+        // Settings link now points to plugin's own settings page
+        expect(settingsLink).toHaveAttribute('href', '/admin/plugins/pages/ai-paper-reviewer/settings');
       });
     });
 
@@ -784,17 +798,19 @@ describe('AdminDashboard', () => {
 
       // First, successful fetch for data loading
       vi.spyOn(globalThis, 'fetch').mockImplementation((url, options) => {
-        const _urlStr = url.toString();
+        const urlStr = url.toString();
 
-        // POST request for queuing job - return error
-        if (options?.method === 'POST') {
+        // POST to /jobs (not /actions/) for queuing job - return error
+        if (options?.method === 'POST' && urlStr.includes('/jobs') && !urlStr.includes('/actions/')) {
           return Promise.resolve({
             ok: false,
+            status: 500,
+            text: () => Promise.resolve(JSON.stringify({ error: 'Queue failed' })),
             json: () => Promise.resolve({ error: 'Queue failed' }),
           } as Response);
         }
 
-        // Other requests - normal mock
+        // Other requests (including POST to actions) - normal mock
         return createFetchMock({
           submissions: mockSubmissionsResponse,
           configValue: { value: true },
@@ -925,17 +941,19 @@ describe('AdminDashboard', () => {
       expect(screen.getByRole('button', { name: /Next/ })).toBeInTheDocument();
     });
 
-    it('should use default values for missing config', async () => {
-      // When config is empty and flag returns false, shows "not configured"
-      // But when API key IS configured, it shows the default provider/model
+    it('should use default values when settings returns empty config', async () => {
+      // When get-settings returns no provider/model, dashboard uses defaults
       vi.spyOn(globalThis, 'fetch').mockImplementation(
-        createFetchMock({ configValue: { value: true } }) // Simulate API key being set
+        createFetchMock({
+          configValue: { value: true },
+          settings: { success: true, config: {} }, // No provider/model in settings
+        })
       );
 
-      render(<AdminDashboard context={{ ...mockContext, config: {} }} data={{}} />);
+      render(<AdminDashboard context={mockContext} data={{}} />);
 
       await waitFor(() => {
-        // Should use default provider/model (text may be split across elements)
+        // Should use default provider/model from component state ('openai'/'gpt-4o')
         expect(screen.getByText('API Configured')).toBeInTheDocument();
         expect(screen.getByText(/openai/)).toBeInTheDocument();
         expect(screen.getByText(/gpt-4o/)).toBeInTheDocument();

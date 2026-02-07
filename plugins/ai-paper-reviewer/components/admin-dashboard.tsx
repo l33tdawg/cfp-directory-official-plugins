@@ -7,7 +7,7 @@
  * configuration status, review queue, and quick actions.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   LayoutDashboard,
   RefreshCw,
@@ -199,6 +199,50 @@ function getAnalysisFromJobResult(result: JobResultData | null): {
   return empty;
 }
 
+/**
+ * Helper to build deduplicated recent reviews from completed jobs
+ */
+function buildRecentReviews(completedJobs: Array<{
+  id: string;
+  payload: { title?: string; submissionId?: string; eventId?: string; eventSlug?: string };
+  status: string;
+  completedAt: string | null;
+  result?: JobResultData;
+}>): RecentReview[] {
+  const allReviews = completedJobs.map((job) => {
+    const parsed = getAnalysisFromJobResult(job.result || null);
+    return {
+      id: job.id,
+      title: job.payload.title || 'Untitled',
+      submissionId: parsed.submissionId || job.payload.submissionId || null,
+      eventId: job.payload.eventId || null,
+      eventSlug: parsed.eventSlug || job.payload.eventSlug || null,
+      score: parsed.score,
+      recommendation: parsed.recommendation,
+      status: job.status,
+      completedAt: job.completedAt,
+      analysis: parsed.analysis,
+    };
+  });
+
+  // Deduplicate by submissionId, keeping only the most recent review for each
+  const seenSubmissions = new Set<string>();
+  return allReviews.filter((review) => {
+    if (!review.submissionId) return true;
+    if (seenSubmissions.has(review.submissionId)) return false;
+    seenSubmissions.add(review.submissionId);
+    return true;
+  });
+}
+
+/**
+ * Helper to get the effective date for a job (handles failed jobs that may not have completedAt)
+ */
+function getJobDate(job: { completedAt?: string | null; failedAt?: string | null; updatedAt?: string | null }): Date | null {
+  const dateStr = job.completedAt || job.failedAt || job.updatedAt;
+  return dateStr ? new Date(dateStr) : null;
+}
+
 interface SubmissionWithReview {
   id: string;
   title: string;
@@ -289,6 +333,9 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [reviewsCollapsed, setReviewsCollapsed] = useState(false);
   const [queueCollapsed, setQueueCollapsed] = useState(false);
 
+  // Track previous active job count for detecting job completion transitions
+  const prevActiveCountRef = useRef(0);
+
   // SECURITY: Never access context.config.apiKey on client - it should be redacted by host
   // Only rely on server-derived boolean from plugin data API
   // Allow actions when status is unknown (null) - server will validate
@@ -297,7 +344,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [provider, setProvider] = useState<string>('openai');
   const [model, setModel] = useState<string>('gpt-4o');
 
-  // Fetch only active jobs (for auto-refresh without full loading state)
+  // Fetch jobs and update all job-related state (for auto-refresh without full loading state)
   const fetchActiveJobs = useCallback(async () => {
     try {
       const [pendingRes, runningRes, completedRes, failedRes] = await Promise.all([
@@ -324,13 +371,17 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       today.setHours(0, 0, 0, 0);
 
       const completedToday = completedJobs.filter(
-        (job: { completedAt: string }) =>
-          job.completedAt && new Date(job.completedAt) >= today
+        (job: { completedAt?: string | null }) => {
+          const jobDate = job.completedAt ? new Date(job.completedAt) : null;
+          return jobDate && jobDate >= today;
+        }
       ).length;
 
       const failedToday = failedJobs.filter(
-        (job: { completedAt: string }) =>
-          job.completedAt && new Date(job.completedAt) >= today
+        (job: { completedAt?: string | null; failedAt?: string | null; updatedAt?: string | null }) => {
+          const jobDate = getJobDate(job);
+          return jobDate && jobDate >= today;
+        }
       ).length;
 
       setJobStats({
@@ -373,6 +424,64 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         })),
       ];
       setActiveJobs(active);
+
+      // Also update recent reviews from completed jobs (so reviews section refreshes automatically)
+      const totalReviews = completedJobs.length + failedJobs.length;
+      const successRate = totalReviews > 0 ? (completedJobs.length / totalReviews) * 100 : 0;
+
+      let totalScore = 0;
+      let scoreCount = 0;
+      completedJobs.forEach((job: { result?: JobResultData }) => {
+        const { score } = getAnalysisFromJobResult(job.result || null);
+        if (typeof score === 'number') {
+          totalScore += score;
+          scoreCount++;
+        }
+      });
+      const averageScore = scoreCount > 0 ? totalScore / scoreCount : 0;
+
+      setReviewStats({ totalReviews, successRate, averageScore });
+      setRecentReviews(buildRecentReviews(completedJobs));
+
+      // Detect job completion transitions - when active count drops, also refresh submissions & costs
+      const newActiveCount = pendingJobs.length + runningJobs.length;
+      const prevActive = prevActiveCountRef.current;
+      prevActiveCountRef.current = newActiveCount;
+
+      if (prevActive > 0 && newActiveCount < prevActive) {
+        // Some jobs just completed - refresh submissions and cost stats
+        try {
+          const [subRes, costRes] = await Promise.all([
+            context.api.fetch('/submissions?limit=100'),
+            context.api.fetch('/actions/get-cost-stats', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({}),
+            }),
+          ]);
+
+          if (subRes.ok) {
+            const submissionsData = await subRes.json();
+            if (submissionsData.submissions) {
+              const unreviewed = submissionsData.submissions.filter(
+                (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || !s.aiReview
+              );
+              setAllUnreviewedSubmissions(unreviewed);
+              setUnreviewedSubmissions(unreviewed.slice(0, QUEUE_PAGE_SIZE));
+              setSubmissionStats(submissionsData.stats);
+            }
+          }
+
+          if (costRes.ok) {
+            const costData = await costRes.json();
+            if (costData.success && costData.stats) {
+              setCostStats(costData.stats);
+            }
+          }
+        } catch {
+          // Silently fail - next poll or manual refresh will catch it
+        }
+      }
 
     } catch {
       // Silently fail - the full refresh will catch errors
@@ -480,8 +589,10 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       ).length;
 
       const failedToday = failedJobs.filter(
-        (job: { completedAt: string }) =>
-          job.completedAt && new Date(job.completedAt) >= today
+        (job: { completedAt?: string | null; failedAt?: string | null; updatedAt?: string | null }) => {
+          const jobDate = getJobDate(job);
+          return jobDate && jobDate >= today;
+        }
       ).length;
 
       setJobStats({
@@ -490,6 +601,9 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         completedToday,
         failedToday,
       });
+
+      // Initialize prevActiveCountRef on first load
+      prevActiveCountRef.current = pendingJobs.length + runningJobs.length;
 
       // Extract active jobs (pending + running) for display
       const active: ActiveJob[] = [
@@ -546,39 +660,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         averageScore,
       });
 
-      // Get recent reviews with proper result parsing, deduplicated by submissionId
-      const allReviews = completedJobs.map((job: {
-        id: string;
-        payload: { title?: string; submissionId?: string; eventId?: string; eventSlug?: string };
-        status: string;
-        completedAt: string | null;
-        result?: JobResultData;
-      }) => {
-        const parsed = getAnalysisFromJobResult(job.result || null);
-        return {
-          id: job.id,
-          title: job.payload.title || 'Untitled',
-          submissionId: parsed.submissionId || job.payload.submissionId || null,
-          eventId: job.payload.eventId || null,
-          eventSlug: parsed.eventSlug || job.payload.eventSlug || null,
-          score: parsed.score,
-          recommendation: parsed.recommendation,
-          status: job.status,
-          completedAt: job.completedAt,
-          analysis: parsed.analysis,
-        };
-      });
-
-      // Deduplicate by submissionId, keeping only the most recent review for each
-      const seenSubmissions = new Set<string>();
-      const recent = allReviews.filter((review: { submissionId: string | null }) => {
-        if (!review.submissionId) return true; // Keep reviews without submissionId
-        if (seenSubmissions.has(review.submissionId)) return false;
-        seenSubmissions.add(review.submissionId);
-        return true;
-      });
-
-      setRecentReviews(recent);
+      // Build deduplicated recent reviews using helper
+      setRecentReviews(buildRecentReviews(completedJobs));
       setReviewsPage(1); // Reset to first page on refresh
 
       // Set submission data

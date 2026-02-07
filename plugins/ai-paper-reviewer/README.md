@@ -156,7 +156,12 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.31.0 (Current)
+### v1.32.0 (Current)
+- **Auto-refresh reviews section** - Completed reviews now appear automatically in the Recent Reviews section without requiring a manual page refresh
+- **Fix: Job queue stats for failed jobs** - Failed job counts now correctly displayed using fallback date fields (failedAt, updatedAt) when completedAt is not set
+- **Smart transition detection** - When active jobs complete, submissions and cost stats are automatically refreshed
+
+### v1.31.0
 - **Dashboard layout improvements** - Recent Reviews section now appears above Review Queue for better visibility
 - **Collapsible sections** - Both Recent Reviews and Review Queue sections can be collapsed/expanded by clicking the header
 - **Recent Reviews pagination** - Reviews are now paginated (10 per page) instead of limited to 10 total

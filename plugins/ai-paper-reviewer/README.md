@@ -156,7 +156,11 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.34.0 (Current)
+### v1.35.0 (Current)
+- **Always-visible Cost & Budget section** - Cost section now always renders on the dashboard with zeroed fallback, instead of disappearing when cost data isn't loaded
+- **Fix: Platform action whitelist** - Added `get-settings` and `save-settings` to the platform's action route whitelist, fixing "unknown / unknown" provider/model display
+
+### v1.34.0
 - **Always-visible Jobs in Progress** - The in-progress section now always shows on the dashboard with an empty state message when no jobs are active, instead of disappearing
 - **Retrying job status** - Jobs with multiple attempts now display a distinct "Retrying" badge with orange styling instead of the normal "Analyzing" badge
 - **Smooth slide-in animation** - Newly completed reviews slide in with a fade+translate animation instead of appearing abruptly on poll updates

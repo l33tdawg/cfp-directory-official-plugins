@@ -341,8 +341,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   // Allow actions when status is unknown (null) - server will validate
   const hasApiKey = apiKeyConfigured === true;
   const apiKeyStatusKnown = apiKeyConfigured !== null;
-  const [provider, setProvider] = useState<string>('openai');
-  const [model, setModel] = useState<string>('gpt-4o');
+  const [provider, setProvider] = useState<string>('');
+  const [model, setModel] = useState<string>('');
 
   // Fetch jobs and update all job-related state (for auto-refresh without full loading state)
   const fetchActiveJobs = useCallback(async () => {
@@ -1104,7 +1104,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                       API Configured
                     </p>
                     <p className="text-xs text-green-600 dark:text-green-400">
-                      Using {provider} / {model}
+                      Using {provider || 'unknown'} / {model || 'unknown'}
                     </p>
                   </div>
                 </>
@@ -1113,7 +1113,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                   <Key className="h-5 w-5 text-slate-500 dark:text-slate-400" />
                   <div>
                     <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Using {provider} / {model}
+                      {provider && model ? `Using ${provider} / ${model}` : 'API Key Not Configured'}
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Click Review on a submission to verify your API key configuration

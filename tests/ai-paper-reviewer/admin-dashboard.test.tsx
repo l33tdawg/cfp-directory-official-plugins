@@ -941,8 +941,8 @@ describe('AdminDashboard', () => {
       expect(screen.getByRole('button', { name: /Next/ })).toBeInTheDocument();
     });
 
-    it('should use default values when settings returns empty config', async () => {
-      // When get-settings returns no provider/model, dashboard uses defaults
+    it('should show unknown when settings returns empty config', async () => {
+      // When get-settings returns no provider/model, dashboard shows unknown
       vi.spyOn(globalThis, 'fetch').mockImplementation(
         createFetchMock({
           configValue: { value: true },
@@ -953,10 +953,8 @@ describe('AdminDashboard', () => {
       render(<AdminDashboard context={mockContext} data={{}} />);
 
       await waitFor(() => {
-        // Should use default provider/model from component state ('openai'/'gpt-4o')
         expect(screen.getByText('API Configured')).toBeInTheDocument();
-        expect(screen.getByText(/openai/)).toBeInTheDocument();
-        expect(screen.getByText(/gpt-4o/)).toBeInTheDocument();
+        expect(screen.getByText(/unknown/)).toBeInTheDocument();
       });
     });
   });

@@ -1333,101 +1333,121 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
             </div>
           </div>
 
-          {/* Cost & Budget Section */}
-          {costStats && (
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="cost-stats">
-              <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      Cost & Budget
-                    </h3>
-                  </div>
-                  {costStats.totalSpend > 0 && (
-                    <button
-                      onClick={() => setShowResetConfirm(true)}
-                      className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                    >
-                      <RotateCw className="h-3 w-3" />
-                      Reset
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Total Spend</p>
-                    <p className="text-lg font-semibold text-slate-900 dark:text-white">
-                      ${costStats.totalSpend.toFixed(2)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Reviews</p>
-                    <p className="text-lg font-semibold text-slate-900 dark:text-white">
-                      {costStats.reviewCount}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Avg Cost/Review</p>
-                    <p className="text-lg font-semibold text-slate-900 dark:text-white">
-                      ${costStats.averageCostPerReview.toFixed(4)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Total Tokens</p>
-                    <p className="text-lg font-semibold text-slate-900 dark:text-white">
-                      {(costStats.totalInputTokens + costStats.totalOutputTokens).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Budget Progress Bar (only if budget is set) */}
-                {costStats.budgetLimit > 0 && (
-                  <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        Budget: ${costStats.totalSpend.toFixed(2)} / ${costStats.budgetLimit.toFixed(2)}
-                      </span>
-                      <span className={`text-xs font-medium ${
-                        costStats.budgetUsedPercent >= 100 ? 'text-red-600 dark:text-red-400' :
-                        costStats.budgetUsedPercent >= 80 ? 'text-amber-600 dark:text-amber-400' :
-                        'text-green-600 dark:text-green-400'
-                      }`}>
-                        {costStats.budgetUsedPercent.toFixed(1)}% used
-                      </span>
+          {/* Cost & Budget Section - Always Visible */}
+          {(() => {
+            const costs = costStats ?? {
+              totalSpend: 0,
+              totalInputTokens: 0,
+              totalOutputTokens: 0,
+              reviewCount: 0,
+              periodStart: new Date().toISOString(),
+              lastUpdated: '',
+              budgetLimit: 0,
+              budgetRemaining: 0,
+              budgetUsedPercent: 0,
+              averageCostPerReview: 0,
+            };
+            return (
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="cost-stats">
+                <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Cost & Budget
+                      </h3>
                     </div>
-                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all ${
-                          costStats.budgetUsedPercent >= 100 ? 'bg-red-600' :
-                          costStats.budgetUsedPercent >= 80 ? 'bg-amber-500' :
-                          'bg-green-600'
-                        }`}
-                        style={{ width: `${Math.min(100, costStats.budgetUsedPercent)}%` }}
-                      />
-                    </div>
-                    {costStats.budgetUsedPercent >= 100 && (
-                      <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-                        Budget exceeded. Auto-reviews are paused. Reset budget to continue.
-                      </p>
+                    {costs.totalSpend > 0 && (
+                      <button
+                        onClick={() => setShowResetConfirm(true)}
+                        className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        <RotateCw className="h-3 w-3" />
+                        Reset
+                      </button>
                     )}
                   </div>
-                )}
+                </div>
+                <div className="p-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Total Spend</p>
+                      <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                        ${costs.totalSpend.toFixed(2)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Reviews</p>
+                      <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                        {costs.reviewCount}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Avg Cost/Review</p>
+                      <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                        ${costs.averageCostPerReview.toFixed(4)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Total Tokens</p>
+                      <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                        {(costs.totalInputTokens + costs.totalOutputTokens).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
 
-                {/* Period Info */}
-                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
-                  Period started: {new Date(costStats.periodStart).toLocaleDateString()}
-                  {costStats.lastUpdated && (
-                    <span className="ml-4">
-                      Last updated: {new Date(costStats.lastUpdated).toLocaleString()}
-                    </span>
+                  {/* Budget Progress Bar (only if budget is set) */}
+                  {costs.budgetLimit > 0 && (
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          Budget: ${costs.totalSpend.toFixed(2)} / ${costs.budgetLimit.toFixed(2)}
+                        </span>
+                        <span className={`text-xs font-medium ${
+                          costs.budgetUsedPercent >= 100 ? 'text-red-600 dark:text-red-400' :
+                          costs.budgetUsedPercent >= 80 ? 'text-amber-600 dark:text-amber-400' :
+                          'text-green-600 dark:text-green-400'
+                        }`}>
+                          {costs.budgetUsedPercent.toFixed(1)}% used
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            costs.budgetUsedPercent >= 100 ? 'bg-red-600' :
+                            costs.budgetUsedPercent >= 80 ? 'bg-amber-500' :
+                            'bg-green-600'
+                          }`}
+                          style={{ width: `${Math.min(100, costs.budgetUsedPercent)}%` }}
+                        />
+                      </div>
+                      {costs.budgetUsedPercent >= 100 && (
+                        <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                          Budget exceeded. Auto-reviews are paused. Reset budget to continue.
+                        </p>
+                      )}
+                    </div>
                   )}
+
+                  {/* Period Info */}
+                  <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
+                    {costs.totalSpend > 0 ? (
+                      <>
+                        Period started: {new Date(costs.periodStart).toLocaleDateString()}
+                        {costs.lastUpdated && (
+                          <span className="ml-4">
+                            Last updated: {new Date(costs.lastUpdated).toLocaleString()}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span>Cost tracking will begin when reviews are processed.</span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Jobs in Progress - Always Visible */}
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="jobs-in-progress">

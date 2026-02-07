@@ -445,8 +445,8 @@ const plugin: Plugin = {
     ctx.logger.info('Attempting to register job handler', { hasJobs: !!ctx.jobs });
     if (ctx.jobs) {
       try {
-        ctx.jobs.registerHandler('ai-review', async (payload) => {
-          return handleAiReviewJob(payload, ctx);
+        ctx.jobs.registerHandler('ai-review', async (job) => {
+          return handleAiReviewJob(job as Record<string, unknown>, ctx);
         });
         ctx.logger.info('Registered ai-review job handler successfully');
       } catch (err) {
@@ -1055,9 +1055,15 @@ export default plugin;
  * This is exported separately so it can be registered with the worker.
  */
 export async function handleAiReviewJob(
-  payload: Record<string, unknown>,
+  rawPayload: Record<string, unknown>,
   ctx: PluginContext
 ): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+  // The platform job processor passes the full Job object (with payload nested inside).
+  // Extract the actual payload whether we receive the full job or just the payload directly.
+  const payload = (typeof rawPayload.payload === 'object' && rawPayload.payload !== null && 'submissionId' in (rawPayload.payload as Record<string, unknown>))
+    ? rawPayload.payload as Record<string, unknown>
+    : rawPayload;
+
   const config = await getConfig(ctx);
   const submissionId = payload.submissionId as string;
   let eventId = payload.eventId as string | undefined;

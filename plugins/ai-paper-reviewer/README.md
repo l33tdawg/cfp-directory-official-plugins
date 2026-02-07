@@ -156,7 +156,13 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.30.0 (Current)
+### v1.31.0 (Current)
+- **Dashboard layout improvements** - Recent Reviews section now appears above Review Queue for better visibility
+- **Collapsible sections** - Both Recent Reviews and Review Queue sections can be collapsed/expanded by clicking the header
+- **Recent Reviews pagination** - Reviews are now paginated (10 per page) instead of limited to 10 total
+- **Fix: Job handler payload extraction** - Correctly handle both full Job objects and direct payloads from the platform job processor
+
+### v1.30.0
 - **Plugin-owned settings** - Configuration moved from platform-managed `configSchema` to plugin-owned data store via `save-settings` / `get-settings` actions
 - **Settings admin page** - Full settings UI with grouped sections: Provider, Review Style, Automation, Budget, Quality Checks, Advanced
 - **Config migration** - Existing deployments seamlessly migrate from platform config to plugin data on enable (one-time, automatic)

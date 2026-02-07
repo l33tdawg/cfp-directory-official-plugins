@@ -281,6 +281,14 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [queuePage, setQueuePage] = useState(1);
   const QUEUE_PAGE_SIZE = 10;
 
+  // Pagination for recent reviews
+  const [reviewsPage, setReviewsPage] = useState(1);
+  const REVIEWS_PAGE_SIZE = 10;
+
+  // Collapsible sections
+  const [reviewsCollapsed, setReviewsCollapsed] = useState(false);
+  const [queueCollapsed, setQueueCollapsed] = useState(false);
+
   // SECURITY: Never access context.config.apiKey on client - it should be redacted by host
   // Only rely on server-derived boolean from plugin data API
   // Allow actions when status is unknown (null) - server will validate
@@ -568,9 +576,10 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         if (seenSubmissions.has(review.submissionId)) return false;
         seenSubmissions.add(review.submissionId);
         return true;
-      }).slice(0, 10);
+      });
 
       setRecentReviews(recent);
+      setReviewsPage(1); // Reset to first page on refresh
 
       // Set submission data
       if (submissionsData.submissions) {
@@ -1343,313 +1352,375 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
             </div>
           )}
 
-          {/* Review Queue - Unreviewed Submissions with Pagination */}
-          {submissionStats.unreviewed > 0 && (
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="review-queue">
-              <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      Review Queue ({submissionStats.unreviewed} unreviewed)
-                    </h3>
-                  </div>
-                  {(hasApiKey || !apiKeyStatusKnown) && allUnreviewedSubmissions.length > 0 && (
-                    <button
-                      onClick={queueAllUnreviewed}
-                      disabled={queueingAll}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md disabled:opacity-50 transition-colors"
-                    >
-                      {queueingAll ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <PlayCircle className="h-4 w-4" />
-                      )}
-                      Review All ({allUnreviewedSubmissions.length})
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="divide-y divide-slate-200 dark:divide-slate-700">
-                {allUnreviewedSubmissions
-                  .slice((queuePage - 1) * QUEUE_PAGE_SIZE, queuePage * QUEUE_PAGE_SIZE)
-                  .map((submission) => (
-                  <div
-                    key={submission.id}
-                    className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                        {submission.title}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {submission.event?.name || 'Unknown Event'} | {new Date(submission.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => queueReview(submission)}
-                      disabled={(apiKeyStatusKnown && !hasApiKey) || queueingIds.has(submission.id)}
-                      className="ml-4 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-md hover:bg-purple-50 dark:hover:bg-purple-950/50 disabled:opacity-50 transition-colors"
-                    >
-                      {queueingIds.has(submission.id) ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Play className="h-4 w-4" />
-                      )}
-                      Review
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Pagination Controls */}
-              {allUnreviewedSubmissions.length > QUEUE_PAGE_SIZE && (
-                <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Showing {((queuePage - 1) * QUEUE_PAGE_SIZE) + 1}-{Math.min(queuePage * QUEUE_PAGE_SIZE, allUnreviewedSubmissions.length)} of {allUnreviewedSubmissions.length}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setQueuePage(p => Math.max(1, p - 1))}
-                      disabled={queuePage === 1}
-                      className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Previous
-                    </button>
-                    <span className="text-sm text-slate-600 dark:text-slate-400 px-2">
-                      Page {queuePage} of {Math.ceil(allUnreviewedSubmissions.length / QUEUE_PAGE_SIZE)}
-                    </span>
-                    <button
-                      onClick={() => setQueuePage(p => Math.min(Math.ceil(allUnreviewedSubmissions.length / QUEUE_PAGE_SIZE), p + 1))}
-                      disabled={queuePage >= Math.ceil(allUnreviewedSubmissions.length / QUEUE_PAGE_SIZE)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Next
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Recent Reviews - Expandable with Re-review */}
+          {/* Recent Reviews - Collapsible with Pagination */}
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="recent-activity">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+            <div
+              className="p-4 border-b border-slate-200 dark:border-slate-700 cursor-pointer select-none"
+              onClick={() => setReviewsCollapsed(prev => !prev)}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
+                  {reviewsCollapsed ? (
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                  )}
                   <History className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                   <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                     Recent Reviews ({recentReviews.length})
                   </h3>
                 </div>
-                {recentReviews.length > 0 && (hasApiKey || !apiKeyStatusKnown) && (
-                  <button
-                    onClick={queueAllReReviews}
-                    disabled={reReviewingAll || recentReviews.filter(r => r.submissionId).length === 0}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 disabled:opacity-50 transition-colors"
-                  >
-                    {reReviewingAll ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RotateCcw className="h-4 w-4" />
-                    )}
-                    Re-review All
-                  </button>
-                )}
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  {recentReviews.length > 0 && (hasApiKey || !apiKeyStatusKnown) && (
+                    <button
+                      onClick={queueAllReReviews}
+                      disabled={reReviewingAll || recentReviews.filter(r => r.submissionId).length === 0}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 disabled:opacity-50 transition-colors"
+                    >
+                      {reReviewingAll ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-4 w-4" />
+                      )}
+                      Re-review All
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-            {recentReviews.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
-                No reviews completed yet. Reviews will appear here once submissions are analyzed.
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-200 dark:divide-slate-700">
-                {recentReviews.map((review) => {
-                  const isExpanded = expandedReviews.has(review.id);
-                  const isReReviewing = reReviewingIds.has(review.id);
-                  const analysis = review.analysis;
+            {!reviewsCollapsed && (
+              <>
+                {recentReviews.length === 0 ? (
+                  <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                    No reviews completed yet. Reviews will appear here once submissions are analyzed.
+                  </div>
+                ) : (
+                  <>
+                    <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                      {recentReviews
+                        .slice((reviewsPage - 1) * REVIEWS_PAGE_SIZE, reviewsPage * REVIEWS_PAGE_SIZE)
+                        .map((review) => {
+                        const isExpanded = expandedReviews.has(review.id);
+                        const isReReviewing = reReviewingIds.has(review.id);
+                        const analysis = review.analysis;
 
-                  return (
-                    <div key={review.id}>
-                      {/* Main Row - Clickable to expand */}
-                      <div
-                        className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer"
-                        onClick={() => toggleReviewExpanded(review.id)}
-                      >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          {/* Expand/Collapse Icon */}
-                          <button className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-                            {isExpanded ? (
-                              <ChevronUp className="h-5 w-5" />
-                            ) : (
-                              <ChevronDown className="h-5 w-5" />
-                            )}
-                          </button>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                              {review.title}
-                            </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {review.completedAt
-                                ? new Date(review.completedAt).toLocaleString()
-                                : 'Pending'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 ml-4" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm font-semibold ${
-                              review.score !== null && review.score >= 4 ? 'text-green-600 dark:text-green-400' :
-                              review.score !== null && review.score >= 3 ? 'text-amber-600 dark:text-amber-400' :
-                              review.score !== null ? 'text-red-600 dark:text-red-400' : 'text-slate-400'
-                            }`}>
-                              {review.score !== null ? `${review.score}/5` : '-'}
-                            </span>
-                            <span
-                              className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                review.recommendation?.includes('ACCEPT') ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-                                review.recommendation?.includes('REJECT') ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                                'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-                              }`}
+                        return (
+                          <div key={review.id}>
+                            {/* Main Row - Clickable to expand */}
+                            <div
+                              className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer"
+                              onClick={() => toggleReviewExpanded(review.id)}
                             >
-                              {review.recommendation?.replace(/_/g, ' ') || '-'}
-                            </span>
-                          </div>
-                          {/* Re-review Button */}
-                          {review.submissionId && (
-                            <button
-                              onClick={() => queueReReview(review)}
-                              disabled={(apiKeyStatusKnown && !hasApiKey) || isReReviewing}
-                              className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-700 rounded hover:bg-blue-50 dark:hover:bg-blue-950/50 disabled:opacity-50 transition-colors"
-                            >
-                              {isReReviewing ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <RotateCcw className="h-3 w-3" />
-                              )}
-                              Re-review
-                            </button>
-                          )}
-                          {/* View Submission Link */}
-                          {review.submissionId && review.eventSlug && (
-                            <a
-                              href={`/admin/events/${review.eventSlug}/submissions/${review.submissionId}`}
-                              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-200 dark:border-purple-700 rounded hover:bg-purple-50 dark:hover:bg-purple-950/50 transition-colors"
-                            >
-                              <FileText className="h-3 w-3" />
-                              View
-                            </a>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Expanded Details - Same style as Review History */}
-                      {isExpanded && analysis && (
-                        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700">
-                          <div className="space-y-4 text-sm">
-                            {/* Criteria Scores - Table style at top */}
-                            {analysis.criteriaScores && Object.keys(analysis.criteriaScores).length > 0 && (
-                              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 divide-x divide-y divide-slate-200 dark:divide-slate-700">
-                                  {Object.entries(analysis.criteriaScores).map(([criteria, score]) => (
-                                    <div key={criteria} className="px-3 py-2 flex items-center justify-between gap-2">
-                                      <span className="text-xs text-slate-600 dark:text-slate-400">{criteria}</span>
-                                      <span className={`text-sm font-semibold ${
-                                        score >= 4 ? 'text-green-600 dark:text-green-400' :
-                                        score >= 3 ? 'text-amber-600 dark:text-amber-400' :
-                                        'text-red-600 dark:text-red-400'
-                                      }`}>
-                                        {score}/5
-                                      </span>
-                                    </div>
-                                  ))}
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                {/* Expand/Collapse Icon */}
+                                <button className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                                  {isExpanded ? (
+                                    <ChevronUp className="h-5 w-5" />
+                                  ) : (
+                                    <ChevronDown className="h-5 w-5" />
+                                  )}
+                                </button>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                                    {review.title}
+                                  </p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    {review.completedAt
+                                      ? new Date(review.completedAt).toLocaleString()
+                                      : 'Pending'}
+                                  </p>
                                 </div>
                               </div>
-                            )}
-
-                            {/* Summary */}
-                            {analysis.summary && (
-                              <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-                                <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Summary</span>
-                                <span className="text-slate-600 dark:text-slate-400">{analysis.summary}</span>
+                              <div className="flex items-center gap-3 ml-4" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-semibold ${
+                                    review.score !== null && review.score >= 4 ? 'text-green-600 dark:text-green-400' :
+                                    review.score !== null && review.score >= 3 ? 'text-amber-600 dark:text-amber-400' :
+                                    review.score !== null ? 'text-red-600 dark:text-red-400' : 'text-slate-400'
+                                  }`}>
+                                    {review.score !== null ? `${review.score}/5` : '-'}
+                                  </span>
+                                  <span
+                                    className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                      review.recommendation?.includes('ACCEPT') ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                                      review.recommendation?.includes('REJECT') ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                                      'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    {review.recommendation?.replace(/_/g, ' ') || '-'}
+                                  </span>
+                                </div>
+                                {/* Re-review Button */}
+                                {review.submissionId && (
+                                  <button
+                                    onClick={() => queueReReview(review)}
+                                    disabled={(apiKeyStatusKnown && !hasApiKey) || isReReviewing}
+                                    className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 border border-blue-200 dark:border-blue-700 rounded hover:bg-blue-50 dark:hover:bg-blue-950/50 disabled:opacity-50 transition-colors"
+                                  >
+                                    {isReReviewing ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <RotateCcw className="h-3 w-3" />
+                                    )}
+                                    Re-review
+                                  </button>
+                                )}
+                                {/* View Submission Link */}
+                                {review.submissionId && review.eventSlug && (
+                                  <a
+                                    href={`/admin/events/${review.eventSlug}/submissions/${review.submissionId}`}
+                                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-200 dark:border-purple-700 rounded hover:bg-purple-50 dark:hover:bg-purple-950/50 transition-colors"
+                                  >
+                                    <FileText className="h-3 w-3" />
+                                    View
+                                  </a>
+                                )}
                               </div>
-                            )}
-
-                            {/* Strengths & Weaknesses Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {/* Strengths - Green */}
-                              {analysis.strengths && analysis.strengths.length > 0 && (
-                                <div className="bg-green-50 dark:bg-green-950/30 p-3 rounded-lg border border-green-200 dark:border-green-800">
-                                  <span className="font-semibold text-green-700 dark:text-green-300 block mb-2">Strengths</span>
-                                  <ul className="list-disc list-inside space-y-1">
-                                    {analysis.strengths.map((s, i) => (
-                                      <li key={i} className="text-slate-600 dark:text-slate-400">{s}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-
-                              {/* Weaknesses - Red */}
-                              {analysis.weaknesses && analysis.weaknesses.length > 0 && (
-                                <div className="bg-red-50 dark:bg-red-950/30 p-3 rounded-lg border border-red-200 dark:border-red-800">
-                                  <span className="font-semibold text-red-700 dark:text-red-300 block mb-2">Weaknesses</span>
-                                  <ul className="list-disc list-inside space-y-1">
-                                    {analysis.weaknesses.map((w, i) => (
-                                      <li key={i} className="text-slate-600 dark:text-slate-400">{w}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
                             </div>
 
-                            {/* Suggestions if available */}
-                            {analysis.suggestions && analysis.suggestions.length > 0 && (
-                              <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
-                                <span className="font-semibold text-blue-700 dark:text-blue-300 block mb-2">Suggestions</span>
-                                <ul className="list-disc list-inside space-y-1">
-                                  {analysis.suggestions.map((s, i) => (
-                                    <li key={i} className="text-slate-600 dark:text-slate-400">{s}</li>
-                                  ))}
-                                </ul>
+                            {/* Expanded Details - Same style as Review History */}
+                            {isExpanded && analysis && (
+                              <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700">
+                                <div className="space-y-4 text-sm">
+                                  {/* Criteria Scores - Table style at top */}
+                                  {analysis.criteriaScores && Object.keys(analysis.criteriaScores).length > 0 && (
+                                    <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 divide-x divide-y divide-slate-200 dark:divide-slate-700">
+                                        {Object.entries(analysis.criteriaScores).map(([criteria, score]) => (
+                                          <div key={criteria} className="px-3 py-2 flex items-center justify-between gap-2">
+                                            <span className="text-xs text-slate-600 dark:text-slate-400">{criteria}</span>
+                                            <span className={`text-sm font-semibold ${
+                                              score >= 4 ? 'text-green-600 dark:text-green-400' :
+                                              score >= 3 ? 'text-amber-600 dark:text-amber-400' :
+                                              'text-red-600 dark:text-red-400'
+                                            }`}>
+                                              {score}/5
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Summary */}
+                                  {analysis.summary && (
+                                    <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                                      <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Summary</span>
+                                      <span className="text-slate-600 dark:text-slate-400">{analysis.summary}</span>
+                                    </div>
+                                  )}
+
+                                  {/* Strengths & Weaknesses Grid */}
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Strengths - Green */}
+                                    {analysis.strengths && analysis.strengths.length > 0 && (
+                                      <div className="bg-green-50 dark:bg-green-950/30 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                                        <span className="font-semibold text-green-700 dark:text-green-300 block mb-2">Strengths</span>
+                                        <ul className="list-disc list-inside space-y-1">
+                                          {analysis.strengths.map((s, i) => (
+                                            <li key={i} className="text-slate-600 dark:text-slate-400">{s}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+
+                                    {/* Weaknesses - Red */}
+                                    {analysis.weaknesses && analysis.weaknesses.length > 0 && (
+                                      <div className="bg-red-50 dark:bg-red-950/30 p-3 rounded-lg border border-red-200 dark:border-red-800">
+                                        <span className="font-semibold text-red-700 dark:text-red-300 block mb-2">Weaknesses</span>
+                                        <ul className="list-disc list-inside space-y-1">
+                                          {analysis.weaknesses.map((w, i) => (
+                                            <li key={i} className="text-slate-600 dark:text-slate-400">{w}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Suggestions if available */}
+                                  {analysis.suggestions && analysis.suggestions.length > 0 && (
+                                    <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                                      <span className="font-semibold text-blue-700 dark:text-blue-300 block mb-2">Suggestions</span>
+                                      <ul className="list-disc list-inside space-y-1">
+                                        {analysis.suggestions.map((s, i) => (
+                                          <li key={i} className="text-slate-600 dark:text-slate-400">{s}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                  {/* Confidence indicator */}
+                                  {analysis.confidence !== undefined && (
+                                    <div className="text-xs text-slate-500 dark:text-slate-500 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center gap-4">
+                                      <span>
+                                        Confidence:{' '}
+                                        <span className={`font-medium ${
+                                          analysis.confidence >= 0.7 ? 'text-green-600 dark:text-green-400' :
+                                          analysis.confidence >= 0.5 ? 'text-yellow-600 dark:text-yellow-400' :
+                                          'text-red-600 dark:text-red-400'
+                                        }`}>
+                                          {Math.round(analysis.confidence * 100)}%
+                                        </span>
+                                      </span>
+                                      <span>Job ID: {review.id}</span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
 
-                            {/* Confidence indicator */}
-                            {analysis.confidence !== undefined && (
-                              <div className="text-xs text-slate-500 dark:text-slate-500 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center gap-4">
-                                <span>
-                                  Confidence:{' '}
-                                  <span className={`font-medium ${
-                                    analysis.confidence >= 0.7 ? 'text-green-600 dark:text-green-400' :
-                                    analysis.confidence >= 0.5 ? 'text-yellow-600 dark:text-yellow-400' :
-                                    'text-red-600 dark:text-red-400'
-                                  }`}>
-                                    {Math.round(analysis.confidence * 100)}%
-                                  </span>
-                                </span>
-                                <span>Job ID: {review.id}</span>
+                            {/* Expanded but no analysis data */}
+                            {isExpanded && !analysis && (
+                              <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700">
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                  No detailed analysis available for this review.
+                                </p>
                               </div>
                             )}
                           </div>
-                        </div>
-                      )}
-
-                      {/* Expanded but no analysis data */}
-                      {isExpanded && !analysis && (
-                        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700">
-                          <p className="text-sm text-slate-500 dark:text-slate-400">
-                            No detailed analysis available for this review.
-                          </p>
-                        </div>
-                      )}
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
+
+                    {/* Pagination Controls for Recent Reviews */}
+                    {recentReviews.length > REVIEWS_PAGE_SIZE && (
+                      <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          Showing {((reviewsPage - 1) * REVIEWS_PAGE_SIZE) + 1}-{Math.min(reviewsPage * REVIEWS_PAGE_SIZE, recentReviews.length)} of {recentReviews.length}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setReviewsPage(p => Math.max(1, p - 1))}
+                            disabled={reviewsPage === 1}
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                            Previous
+                          </button>
+                          <span className="text-sm text-slate-600 dark:text-slate-400 px-2">
+                            Page {reviewsPage} of {Math.ceil(recentReviews.length / REVIEWS_PAGE_SIZE)}
+                          </span>
+                          <button
+                            onClick={() => setReviewsPage(p => Math.min(Math.ceil(recentReviews.length / REVIEWS_PAGE_SIZE), p + 1))}
+                            disabled={reviewsPage >= Math.ceil(recentReviews.length / REVIEWS_PAGE_SIZE)}
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Next
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
           </div>
+
+          {/* Review Queue - Collapsible Unreviewed Submissions with Pagination */}
+          {submissionStats.unreviewed > 0 && (
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="review-queue">
+              <div
+                className="p-4 border-b border-slate-200 dark:border-slate-700 cursor-pointer select-none"
+                onClick={() => setQueueCollapsed(prev => !prev)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {queueCollapsed ? (
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-slate-400" />
+                    )}
+                    <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      Review Queue ({submissionStats.unreviewed} unreviewed)
+                    </h3>
+                  </div>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    {(hasApiKey || !apiKeyStatusKnown) && allUnreviewedSubmissions.length > 0 && (
+                      <button
+                        onClick={queueAllUnreviewed}
+                        disabled={queueingAll}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md disabled:opacity-50 transition-colors"
+                      >
+                        {queueingAll ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <PlayCircle className="h-4 w-4" />
+                        )}
+                        Review All ({allUnreviewedSubmissions.length})
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {!queueCollapsed && (
+                <>
+                  <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {allUnreviewedSubmissions
+                      .slice((queuePage - 1) * QUEUE_PAGE_SIZE, queuePage * QUEUE_PAGE_SIZE)
+                      .map((submission) => (
+                      <div
+                        key={submission.id}
+                        className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                            {submission.title}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {submission.event?.name || 'Unknown Event'} | {new Date(submission.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => queueReview(submission)}
+                          disabled={(apiKeyStatusKnown && !hasApiKey) || queueingIds.has(submission.id)}
+                          className="ml-4 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-md hover:bg-purple-50 dark:hover:bg-purple-950/50 disabled:opacity-50 transition-colors"
+                        >
+                          {queueingIds.has(submission.id) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                          Review
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Pagination Controls */}
+                  {allUnreviewedSubmissions.length > QUEUE_PAGE_SIZE && (
+                    <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Showing {((queuePage - 1) * QUEUE_PAGE_SIZE) + 1}-{Math.min(queuePage * QUEUE_PAGE_SIZE, allUnreviewedSubmissions.length)} of {allUnreviewedSubmissions.length}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setQueuePage(p => Math.max(1, p - 1))}
+                          disabled={queuePage === 1}
+                          className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </button>
+                        <span className="text-sm text-slate-600 dark:text-slate-400 px-2">
+                          Page {queuePage} of {Math.ceil(allUnreviewedSubmissions.length / QUEUE_PAGE_SIZE)}
+                        </span>
+                        <button
+                          onClick={() => setQueuePage(p => Math.min(Math.ceil(allUnreviewedSubmissions.length / QUEUE_PAGE_SIZE), p + 1))}
+                          disabled={queuePage >= Math.ceil(allUnreviewedSubmissions.length / QUEUE_PAGE_SIZE)}
+                          className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

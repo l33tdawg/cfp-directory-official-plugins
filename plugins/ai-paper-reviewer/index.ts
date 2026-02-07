@@ -1021,22 +1021,20 @@ const plugin: Plugin = {
       _params: Record<string, unknown>
     ): Promise<{ success: boolean; config?: Record<string, unknown>; error?: string }> => {
       try {
-        const [apiKey, general] = await Promise.all([
-          ctx.data.get<string>('settings', 'apiKey'),
-          ctx.data.get<Record<string, unknown>>('settings', 'general'),
-        ]);
+        // Use getConfig() to get effective config with defaults applied
+        const config = await getConfig(ctx);
 
         // Mask API key — only show last 4 chars
-        const maskedKey = apiKey
-          ? `****${apiKey.slice(-4)}`
+        const maskedKey = config.apiKey
+          ? `****${config.apiKey.slice(-4)}`
           : undefined;
 
         return {
           success: true,
           config: {
-            ...(general || {}),
+            ...config,
             apiKey: maskedKey,
-            _hasApiKey: Boolean(apiKey),
+            _hasApiKey: Boolean(config.apiKey),
           },
         };
       } catch (error) {

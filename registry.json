@@ -44,7 +44,7 @@
         { "path": "/settings", "title": "Settings", "component": "AdminSettings" }
       ],
       "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/v1.32.0/ai-paper-reviewer.zip",
-      "sha256": "4e1fbe4d80da2cecd689d536c23b2e7287eb670fa353be0f9e3cec1918531ee7"
+      "sha256": "9610fd208c5eb4e7a11b9ade0cc273a8e983d290bc2e7cf1efd4c8574136c33f"
     },
     {
       "name": "example-webhook",

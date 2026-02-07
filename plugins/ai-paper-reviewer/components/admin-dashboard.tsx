@@ -33,6 +33,7 @@ import {
   Trash2,
   DollarSign,
   RotateCw,
+  Inbox,
 } from 'lucide-react';
 import type { PluginComponentProps } from '@/lib/plugins';
 import { AdminOnboarding } from './admin-onboarding';
@@ -276,7 +277,7 @@ interface SubmissionStats {
 
 interface ActiveJob {
   id: string;
-  status: 'pending' | 'running';
+  status: 'pending' | 'running' | 'retrying';
   title: string;
   submissionId: string;
   createdAt: string;
@@ -335,6 +336,13 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
 
   // Track previous active job count for detecting job completion transitions
   const prevActiveCountRef = useRef(0);
+
+  // Track previous review IDs for slide-in animation on new reviews
+  const prevReviewIdsRef = useRef<Set<string>>(new Set());
+  const [newReviewIds, setNewReviewIds] = useState<Set<string>>(new Set());
+
+  // Track when active jobs last dropped to zero (for extended polling)
+  const lastActiveTimeRef = useRef<number | null>(null);
 
   // SECURITY: Never access context.config.apiKey on client - it should be redacted by host
   // Only rely on server-derived boolean from plugin data API
@@ -401,7 +409,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
           attempts: number;
         }) => ({
           id: job.id,
-          status: 'running' as const,
+          status: (job.attempts > 1 ? 'retrying' : 'running') as ActiveJob['status'],
           title: job.payload.title || 'Untitled',
           submissionId: job.payload.submissionId || '',
           createdAt: job.createdAt,
@@ -441,7 +449,23 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       const averageScore = scoreCount > 0 ? totalScore / scoreCount : 0;
 
       setReviewStats({ totalReviews, successRate, averageScore });
-      setRecentReviews(buildRecentReviews(completedJobs));
+
+      const updatedReviews = buildRecentReviews(completedJobs);
+      // Detect newly arrived reviews for slide-in animation
+      const currentIds = new Set(updatedReviews.map(r => r.id));
+      const prevIds = prevReviewIdsRef.current;
+      if (prevIds.size > 0) {
+        const freshIds = new Set<string>();
+        currentIds.forEach(id => {
+          if (!prevIds.has(id)) freshIds.add(id);
+        });
+        if (freshIds.size > 0) {
+          setNewReviewIds(freshIds);
+          setTimeout(() => setNewReviewIds(new Set()), 500);
+        }
+      }
+      prevReviewIdsRef.current = currentIds;
+      setRecentReviews(updatedReviews);
 
       // Detect job completion transitions - when active count drops, also refresh submissions & costs
       const newActiveCount = pendingJobs.length + runningJobs.length;
@@ -615,7 +639,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
           attempts: number;
         }) => ({
           id: job.id,
-          status: 'running' as const,
+          status: (job.attempts > 1 ? 'retrying' : 'running') as ActiveJob['status'],
           title: job.payload.title || 'Untitled',
           submissionId: job.payload.submissionId || '',
           createdAt: job.createdAt,
@@ -661,7 +685,9 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       });
 
       // Build deduplicated recent reviews using helper
-      setRecentReviews(buildRecentReviews(completedJobs));
+      const initialReviews = buildRecentReviews(completedJobs);
+      prevReviewIdsRef.current = new Set(initialReviews.map(r => r.id));
+      setRecentReviews(initialReviews);
       setReviewsPage(1); // Reset to first page on refresh
 
       // Set submission data
@@ -688,14 +714,33 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   }, [fetchData]);
 
   // Auto-refresh active jobs section only (every 5 seconds)
+  // Continues polling for 15s after last job completes to catch final review state
+  const hasActiveJobs = jobStats.running > 0 || jobStats.pending > 0;
+
   useEffect(() => {
-    if (jobStats.running > 0 || jobStats.pending > 0) {
+    if (hasActiveJobs) {
+      // Jobs are active — record that we were active and poll
+      lastActiveTimeRef.current = Date.now();
       const interval = setInterval(() => {
         fetchActiveJobs();
       }, 5000);
       return () => clearInterval(interval);
     }
-  }, [jobStats.running, jobStats.pending, fetchActiveJobs]);
+
+    // No active jobs — continue polling if we recently had active jobs
+    if (lastActiveTimeRef.current !== null) {
+      const interval = setInterval(() => {
+        const elapsed = Date.now() - (lastActiveTimeRef.current ?? 0);
+        if (elapsed > 15000) {
+          lastActiveTimeRef.current = null;
+          clearInterval(interval);
+          return;
+        }
+        fetchActiveJobs();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [hasActiveJobs, fetchActiveJobs]);
 
   const queueReview = async (submission: UnreviewedSubmission) => {
     setQueueingIds((prev) => new Set(prev).add(submission.id));
@@ -944,6 +989,21 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
 
   return (
     <div className="space-y-6" data-testid="admin-dashboard">
+      <style>{`
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-slideIn {
+          animation: slideIn 0.5s ease-out;
+        }
+      `}</style>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -1369,22 +1429,32 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
             </div>
           )}
 
-          {/* Jobs in Progress - Active Jobs */}
-          {activeJobs.length > 0 && (
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="jobs-in-progress">
-              <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+          {/* Jobs in Progress - Always Visible */}
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="jobs-in-progress">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {activeJobs.length > 0 ? (
                     <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      Jobs in Progress ({activeJobs.length})
-                    </h3>
-                  </div>
+                  ) : (
+                    <Inbox className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                  )}
+                  <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Jobs in Progress ({activeJobs.length})
+                  </h3>
+                </div>
+                {activeJobs.length > 0 && (
                   <span className="text-xs text-slate-500 dark:text-slate-400">
                     Auto-refreshing every 5s
                   </span>
-                </div>
+                )}
               </div>
+            </div>
+            {activeJobs.length === 0 ? (
+              <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                No active jobs. Reviews will appear here when submissions are queued.
+              </div>
+            ) : (
               <div className="divide-y divide-slate-200 dark:divide-slate-700">
                 {activeJobs.map((job) => (
                   <div
@@ -1398,6 +1468,11 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                             <Loader2 className="h-3 w-3 animate-spin" />
                             Analyzing
                           </span>
+                        ) : job.status === 'retrying' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+                            <RotateCw className="h-3 w-3 animate-spin" />
+                            Retrying
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
                             <Clock className="h-3 w-3" />
@@ -1410,8 +1485,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                       </div>
                       <div className="mt-1 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                         <span>
-                          {job.status === 'running' ? 'Started' : 'Queued'}{' '}
-                          {new Date(job.status === 'running' && job.startedAt ? job.startedAt : job.createdAt).toLocaleTimeString()}
+                          {job.status === 'running' || job.status === 'retrying' ? 'Started' : 'Queued'}{' '}
+                          {new Date((job.status === 'running' || job.status === 'retrying') && job.startedAt ? job.startedAt : job.createdAt).toLocaleTimeString()}
                         </span>
                         {job.attempts > 1 && (
                           <span className="text-amber-600 dark:text-amber-400">
@@ -1420,20 +1495,20 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                         )}
                       </div>
                     </div>
-                    {job.status === 'running' && (
+                    {(job.status === 'running' || job.status === 'retrying') && (
                       <div className="ml-4 flex items-center gap-2">
                         <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
-                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
-                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+                          <div className={`w-2 h-2 ${job.status === 'retrying' ? 'bg-orange-600' : 'bg-blue-600'} rounded-full animate-pulse`} />
+                          <div className={`w-2 h-2 ${job.status === 'retrying' ? 'bg-orange-600' : 'bg-blue-600'} rounded-full animate-pulse`} style={{ animationDelay: '0.2s' }} />
+                          <div className={`w-2 h-2 ${job.status === 'retrying' ? 'bg-orange-600' : 'bg-blue-600'} rounded-full animate-pulse`} style={{ animationDelay: '0.4s' }} />
                         </div>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Recent Reviews - Collapsible with Pagination */}
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg" data-testid="recent-activity">
@@ -1487,8 +1562,10 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                         const isReReviewing = reReviewingIds.has(review.id);
                         const analysis = review.analysis;
 
+                        const isNew = newReviewIds.has(review.id);
+
                         return (
-                          <div key={review.id}>
+                          <div key={review.id} className={isNew ? 'animate-slideIn' : ''}>
                             {/* Main Row - Clickable to expand */}
                             <div
                               className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer"

@@ -40,6 +40,7 @@ vi.mock('lucide-react', () => ({
   Trash2: () => <span data-testid="icon-trash" />,
   DollarSign: () => <span data-testid="icon-dollar" />,
   RotateCw: () => <span data-testid="icon-rotate-cw" />,
+  Inbox: () => <span data-testid="icon-inbox" />,
   // Icons for AdminOnboarding component
   Cpu: () => <span data-testid="icon-cpu" />,
   Zap: () => <span data-testid="icon-zap" />,

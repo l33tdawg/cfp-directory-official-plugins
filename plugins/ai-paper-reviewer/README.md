@@ -156,7 +156,13 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.33.0 (Current)
+### v1.34.0 (Current)
+- **Always-visible Jobs in Progress** - The in-progress section now always shows on the dashboard with an empty state message when no jobs are active, instead of disappearing
+- **Retrying job status** - Jobs with multiple attempts now display a distinct "Retrying" badge with orange styling instead of the normal "Analyzing" badge
+- **Smooth slide-in animation** - Newly completed reviews slide in with a fade+translate animation instead of appearing abruptly on poll updates
+- **Extended polling after completion** - Dashboard continues polling for 15 seconds after the last job completes to ensure the final review state is captured and animated
+
+### v1.33.0
 - **Auto-refresh reviews section** - Completed reviews now appear automatically in the Recent Reviews section without requiring a manual page refresh
 - **Fix: Job queue stats for failed jobs** - Failed job counts now correctly displayed using fallback date fields (failedAt, updatedAt) when completedAt is not set
 - **Fix: Provider/model display** - Dashboard now shows actual configured provider (e.g. Gemini) instead of incorrect defaults

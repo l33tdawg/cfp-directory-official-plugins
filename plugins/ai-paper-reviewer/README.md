@@ -156,7 +156,15 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.35.0 (Current)
+### v1.37.0 (Current)
+- **Recent Reviews sorting** - Sort controls (Date/Title) in the Recent Reviews header with toggle direction, resets pagination
+- **Optimistic UI updates** - Queued submissions immediately move from the review queue to Jobs in Progress without waiting for server sync
+- **Send Feedback to Speaker** - New button in expanded review details opens a compose modal pre-filled with AI analysis, sends via platform messaging API with graceful 404 fallback for self-hosted
+
+### v1.36.0
+- **Server-side ESM bundle** - Plugin server code pre-compiled to `dist/server.mjs` via esbuild for build-time loading on Vercel
+
+### v1.35.0
 - **Always-visible Cost & Budget section** - Cost section now always renders on the dashboard with zeroed fallback, instead of disappearing when cost data isn't loaded
 - **Fix: Platform action whitelist** - Added `get-settings` and `save-settings` to the platform's action route whitelist, fixing "unknown / unknown" provider/model display
 

@@ -15,8 +15,8 @@ describe('Manifest structure', () => {
   // -----------------------------------------------------------------------
 
   describe('version', () => {
-    it('manifest version is 1.36.0', () => {
-      expect(manifest.version).toBe('1.36.0');
+    it('manifest version is 1.37.0', () => {
+      expect(manifest.version).toBe('1.37.0');
     });
   });
 

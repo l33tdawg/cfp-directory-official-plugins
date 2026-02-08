@@ -41,6 +41,9 @@ vi.mock('lucide-react', () => ({
   DollarSign: () => <span data-testid="icon-dollar" />,
   RotateCw: () => <span data-testid="icon-rotate-cw" />,
   Inbox: () => <span data-testid="icon-inbox" />,
+  ArrowUpDown: () => <span data-testid="icon-arrow-up-down" />,
+  Send: () => <span data-testid="icon-send" />,
+  MessageSquare: () => <span data-testid="icon-message-square" />,
   // Icons for AdminOnboarding component
   Cpu: () => <span data-testid="icon-cpu" />,
   Zap: () => <span data-testid="icon-zap" />,
@@ -956,6 +959,491 @@ describe('AdminDashboard', () => {
       await waitFor(() => {
         expect(screen.getByText('API Configured')).toBeInTheDocument();
         expect(screen.getByText(/unknown/)).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Recent Reviews Sorting
+  // ---------------------------------------------------------------------------
+
+  describe('Recent Reviews Sorting', () => {
+    const sortableJobs = [
+      {
+        ...mockCompletedJob,
+        id: 'job-alpha',
+        payload: { title: 'Alpha Paper', submissionId: 'sub-alpha' },
+        completedAt: '2024-01-15T10:00:00Z',
+        result: { success: true, data: { submissionId: 'sub-alpha', analysis: { overallScore: 3, recommendation: 'ACCEPT' } } },
+      },
+      {
+        ...mockCompletedJob,
+        id: 'job-beta',
+        payload: { title: 'Beta Paper', submissionId: 'sub-beta' },
+        completedAt: '2024-01-16T10:00:00Z',
+        result: { success: true, data: { submissionId: 'sub-beta', analysis: { overallScore: 4, recommendation: 'ACCEPT' } } },
+      },
+      {
+        ...mockCompletedJob,
+        id: 'job-charlie',
+        payload: { title: 'Charlie Paper', submissionId: 'sub-charlie' },
+        completedAt: '2024-01-14T10:00:00Z',
+        result: { success: true, data: { submissionId: 'sub-charlie', analysis: { overallScore: 5, recommendation: 'STRONG_ACCEPT' } } },
+      },
+    ];
+
+    it('should show sort controls when reviews exist', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        createFetchMock({ completed: { jobs: sortableJobs } })
+      );
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sort-controls')).toBeInTheDocument();
+        expect(screen.getByTestId('sort-date-button')).toBeInTheDocument();
+        expect(screen.getByTestId('sort-title-button')).toBeInTheDocument();
+      });
+    });
+
+    it('should default to sorting by date descending', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        createFetchMock({ completed: { jobs: sortableJobs } })
+      );
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Alpha Paper')).toBeInTheDocument();
+      });
+
+      // Date button should be active (has purple bg class)
+      const dateBtn = screen.getByTestId('sort-date-button');
+      expect(dateBtn.className).toContain('bg-purple-100');
+
+      // Default desc: Beta (Jan 16) should appear before Alpha (Jan 15)
+      const items = screen.getAllByText(/Paper/);
+      const betaIndex = items.findIndex(el => el.textContent === 'Beta Paper');
+      const alphaIndex = items.findIndex(el => el.textContent === 'Alpha Paper');
+      expect(betaIndex).toBeLessThan(alphaIndex);
+    });
+
+    it('should sort by title when Title button is clicked', async () => {
+      const user = userEvent.setup();
+
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        createFetchMock({ completed: { jobs: sortableJobs } })
+      );
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Alpha Paper')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId('sort-title-button'));
+
+      // Title button should now be active
+      const titleBtn = screen.getByTestId('sort-title-button');
+      expect(titleBtn.className).toContain('bg-purple-100');
+
+      // Title asc: Alpha should appear first
+      const items = screen.getAllByText(/Paper/);
+      const alphaIndex = items.findIndex(el => el.textContent === 'Alpha Paper');
+      const betaIndex = items.findIndex(el => el.textContent === 'Beta Paper');
+      expect(alphaIndex).toBeLessThan(betaIndex);
+    });
+
+    it('should toggle direction when clicking same sort button', async () => {
+      const user = userEvent.setup();
+
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        createFetchMock({ completed: { jobs: sortableJobs } })
+      );
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Alpha Paper')).toBeInTheDocument();
+      });
+
+      // Click Date again to toggle from desc to asc
+      await user.click(screen.getByTestId('sort-date-button'));
+
+      // Asc order: Charlie (Jan 14) should appear first
+      const items = screen.getAllByText(/Paper/);
+      const charlieIndex = items.findIndex(el => el.textContent === 'Charlie Paper');
+      const betaIndex = items.findIndex(el => el.textContent === 'Beta Paper');
+      expect(charlieIndex).toBeLessThan(betaIndex);
+    });
+
+    it('should not show sort controls when no reviews', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(createFetchMock());
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Recent Reviews/)).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId('sort-controls')).not.toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Optimistic UI Updates
+  // ---------------------------------------------------------------------------
+
+  describe('Optimistic UI Updates', () => {
+    it('should remove submission from queue after clicking Review', async () => {
+      const user = userEvent.setup();
+
+      // After the POST, the refreshDataSilent will return updated data (1 fewer unreviewed)
+      let postCalled = false;
+      vi.spyOn(globalThis, 'fetch').mockImplementation((url, options) => {
+        const urlStr = url.toString();
+
+        // Track when the job POST happens
+        if (options?.method === 'POST' && urlStr.includes('/jobs') && !urlStr.includes('/actions/')) {
+          postCalled = true;
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ id: 'new-job-123' }),
+          } as Response);
+        }
+
+        // After POST, submissions endpoint returns updated data
+        if (postCalled && urlStr.includes('/submissions')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              submissions: [],
+              stats: { total: 10, reviewed: 5, pending: 3, unreviewed: 2 },
+            }),
+          } as Response);
+        }
+
+        return createFetchMock({
+          submissions: mockSubmissionsResponse,
+          configValue: { value: true },
+        })(urlStr);
+      });
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Unreviewed Submission')).toBeInTheDocument();
+      });
+
+      const reviewButton = screen.getByRole('button', { name: /Review$/ });
+      await user.click(reviewButton);
+
+      // After successful POST + refresh, unreviewed count should drop
+      await waitFor(() => {
+        const statsCard = screen.getByTestId('submission-stats-card');
+        expect(within(statsCard).getByText('2')).toBeInTheDocument(); // unreviewed: 3 -> 2
+      });
+    });
+
+    it('should add optimistic entry to active jobs after queueing', async () => {
+      const user = userEvent.setup();
+
+      // After POST, return the submission as a pending job
+      let postCalled = false;
+      vi.spyOn(globalThis, 'fetch').mockImplementation((url, options) => {
+        const urlStr = url.toString();
+
+        if (options?.method === 'POST' && urlStr.includes('/jobs') && !urlStr.includes('/actions/')) {
+          postCalled = true;
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ id: 'new-job-123' }),
+          } as Response);
+        }
+
+        // After POST, pending jobs include the new item
+        if (postCalled && urlStr.includes('status=pending')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              jobs: [{
+                id: 'new-job-123',
+                payload: { title: 'Unreviewed Submission', submissionId: 'sub-5' },
+                createdAt: new Date().toISOString(),
+                attempts: 0,
+              }],
+            }),
+          } as Response);
+        }
+
+        // After POST, no more unreviewed submissions
+        if (postCalled && urlStr.includes('/submissions')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              submissions: [],
+              stats: { total: 10, reviewed: 5, pending: 3, unreviewed: 2 },
+            }),
+          } as Response);
+        }
+
+        return createFetchMock({
+          submissions: mockSubmissionsResponse,
+          configValue: { value: true },
+        })(urlStr);
+      });
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Unreviewed Submission')).toBeInTheDocument();
+      });
+
+      const reviewButton = screen.getByRole('button', { name: /Review$/ });
+      await user.click(reviewButton);
+
+      // Should see the item appear in jobs in progress
+      await waitFor(() => {
+        const jobsSection = screen.getByTestId('jobs-in-progress');
+        expect(within(jobsSection).getByText('Unreviewed Submission')).toBeInTheDocument();
+      });
+    });
+
+    it('should clear queue after Review All', async () => {
+      const user = userEvent.setup();
+
+      let postCount = 0;
+      vi.spyOn(globalThis, 'fetch').mockImplementation((url, options) => {
+        const urlStr = url.toString();
+
+        if (options?.method === 'POST' && urlStr.includes('/jobs') && !urlStr.includes('/actions/')) {
+          postCount++;
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ id: `new-job-${postCount}` }),
+          } as Response);
+        }
+
+        // After all posts, return empty unreviewed
+        if (postCount > 0 && urlStr.includes('/submissions')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              submissions: [],
+              stats: { total: 10, reviewed: 6, pending: 4, unreviewed: 0 },
+            }),
+          } as Response);
+        }
+
+        return createFetchMock({
+          submissions: mockSubmissionsResponse,
+          configValue: { value: true },
+        })(urlStr);
+      });
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Review All/)).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText(/Review All/));
+
+      // After Review All + refresh, unreviewed should be 0
+      await waitFor(() => {
+        const statsCard = screen.getByTestId('submission-stats-card');
+        expect(within(statsCard).getByText('0')).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Send Feedback to Speaker
+  // ---------------------------------------------------------------------------
+
+  describe('Send Feedback to Speaker', () => {
+    const reviewJobWithAnalysis = {
+      ...mockCompletedJob,
+      id: 'job-feedback',
+      payload: { title: 'Feedback Test Paper', submissionId: 'sub-feedback' },
+      result: {
+        success: true,
+        data: {
+          submissionId: 'sub-feedback',
+          analysis: {
+            overallScore: 4,
+            recommendation: 'ACCEPT',
+            confidence: 0.85,
+            summary: 'A well-written paper on ML.',
+            strengths: ['Clear methodology', 'Good results'],
+            weaknesses: ['Limited scope'],
+            suggestions: ['Expand the dataset'],
+          },
+        },
+      },
+    };
+
+    it('should show Send Feedback button in expanded review details', async () => {
+      const user = userEvent.setup();
+
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        createFetchMock({ completed: { jobs: [reviewJobWithAnalysis] } })
+      );
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Feedback Test Paper')).toBeInTheDocument();
+      });
+
+      // Click to expand
+      await user.click(screen.getByText('Feedback Test Paper'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('open-feedback-button')).toBeInTheDocument();
+        expect(screen.getByText('Send Feedback to Speaker')).toBeInTheDocument();
+      });
+    });
+
+    it('should open feedback modal with pre-filled content', async () => {
+      const user = userEvent.setup();
+
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        createFetchMock({ completed: { jobs: [reviewJobWithAnalysis] } })
+      );
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Feedback Test Paper')).toBeInTheDocument();
+      });
+
+      // Expand and click feedback button
+      await user.click(screen.getByText('Feedback Test Paper'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('open-feedback-button')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId('open-feedback-button'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('feedback-modal')).toBeInTheDocument();
+        // Subject should be pre-filled
+        const subjectInput = screen.getByTestId('feedback-subject') as HTMLInputElement;
+        expect(subjectInput.value).toContain('Feedback Test Paper');
+        // Body should contain analysis content
+        const bodyInput = screen.getByTestId('feedback-body') as HTMLTextAreaElement;
+        expect(bodyInput.value).toContain('A well-written paper on ML.');
+        expect(bodyInput.value).toContain('Clear methodology');
+        expect(bodyInput.value).toContain('Limited scope');
+        expect(bodyInput.value).toContain('Expand the dataset');
+      });
+    });
+
+    it('should close feedback modal on Cancel', async () => {
+      const user = userEvent.setup();
+
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        createFetchMock({ completed: { jobs: [reviewJobWithAnalysis] } })
+      );
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Feedback Test Paper')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Feedback Test Paper'));
+      await waitFor(() => expect(screen.getByTestId('open-feedback-button')).toBeInTheDocument());
+      await user.click(screen.getByTestId('open-feedback-button'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('feedback-modal')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Cancel'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('feedback-modal')).not.toBeInTheDocument();
+      });
+    });
+
+    it('should send feedback and show success state', async () => {
+      const user = userEvent.setup();
+
+      // Mock both the plugin API (for dashboard data) and the direct messaging API
+      vi.spyOn(globalThis, 'fetch').mockImplementation((url, options) => {
+        const urlStr = url.toString();
+
+        // Direct messaging API call
+        if (urlStr === '/api/messages' && options?.method === 'POST') {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ success: true }),
+          } as Response);
+        }
+
+        // Plugin API calls
+        return createFetchMock({
+          completed: { jobs: [reviewJobWithAnalysis] },
+        })(urlStr);
+      });
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Feedback Test Paper')).toBeInTheDocument();
+      });
+
+      // Expand, open feedback, and send
+      await user.click(screen.getByText('Feedback Test Paper'));
+      await waitFor(() => expect(screen.getByTestId('open-feedback-button')).toBeInTheDocument());
+      await user.click(screen.getByTestId('open-feedback-button'));
+      await waitFor(() => expect(screen.getByTestId('feedback-modal')).toBeInTheDocument());
+
+      await user.click(screen.getByTestId('send-feedback-button'));
+
+      // Should show success
+      await waitFor(() => {
+        expect(screen.getByText('Feedback sent successfully!')).toBeInTheDocument();
+      });
+    });
+
+    it('should show fallback message when messaging API returns 404', async () => {
+      const user = userEvent.setup();
+
+      vi.spyOn(globalThis, 'fetch').mockImplementation((url, options) => {
+        const urlStr = url.toString();
+
+        if (urlStr === '/api/messages' && options?.method === 'POST') {
+          return Promise.resolve({
+            ok: false,
+            status: 404,
+            json: () => Promise.resolve({ error: 'Not found' }),
+          } as Response);
+        }
+
+        return createFetchMock({
+          completed: { jobs: [reviewJobWithAnalysis] },
+        })(urlStr);
+      });
+
+      render(<AdminDashboard context={mockContext} data={{}} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Feedback Test Paper')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Feedback Test Paper'));
+      await waitFor(() => expect(screen.getByTestId('open-feedback-button')).toBeInTheDocument());
+      await user.click(screen.getByTestId('open-feedback-button'));
+      await waitFor(() => expect(screen.getByTestId('feedback-modal')).toBeInTheDocument());
+
+      await user.click(screen.getByTestId('send-feedback-button'));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Messaging is not available/)).toBeInTheDocument();
       });
     });
   });

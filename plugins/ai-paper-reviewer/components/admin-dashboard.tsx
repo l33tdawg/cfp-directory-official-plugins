@@ -7,7 +7,7 @@
  * configuration status, review queue, and quick actions.
  */
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   LayoutDashboard,
   RefreshCw,
@@ -34,6 +34,9 @@ import {
   DollarSign,
   RotateCw,
   Inbox,
+  ArrowUpDown,
+  Send,
+  MessageSquare,
 } from 'lucide-react';
 import type { PluginComponentProps } from '@/lib/plugins';
 import { AdminOnboarding } from './admin-onboarding';
@@ -321,6 +324,19 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
   const [resettingBudget, setResettingBudget] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
+  // Sorting for recent reviews
+  const [reviewsSortBy, setReviewsSortBy] = useState<'date' | 'title'>('date');
+  const [reviewsSortDir, setReviewsSortDir] = useState<'asc' | 'desc'>('desc');
+
+  // Feedback modal state
+  const [feedbackModal, setFeedbackModal] = useState<{
+    review: RecentReview;
+    subject: string;
+    body: string;
+  } | null>(null);
+  const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+
   // Pagination for review queue
   const [allUnreviewedSubmissions, setAllUnreviewedSubmissions] = useState<UnreviewedSubmission[]>([]);
   const [queuePage, setQueuePage] = useState(1);
@@ -343,6 +359,22 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
 
   // Track when active jobs last dropped to zero (for extended polling)
   const lastActiveTimeRef = useRef<number | null>(null);
+
+  // Sorted recent reviews
+  const sortedReviews = useMemo(() => {
+    const sorted = [...recentReviews];
+    sorted.sort((a, b) => {
+      if (reviewsSortBy === 'title') {
+        const cmp = a.title.localeCompare(b.title);
+        return reviewsSortDir === 'asc' ? cmp : -cmp;
+      }
+      // Sort by date (completedAt)
+      const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+      const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+      return reviewsSortDir === 'asc' ? dateA - dateB : dateB - dateA;
+    });
+    return sorted;
+  }, [recentReviews, reviewsSortBy, reviewsSortDir]);
 
   // SECURITY: Never access context.config.apiKey on client - it should be redacted by host
   // Only rely on server-derived boolean from plugin data API
@@ -780,7 +812,33 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       const result = await response.json();
       console.log('[AI Reviewer] Job created:', result);
 
-      // Refresh data silently to show updated status without full page spinner
+      // Optimistic UI update: remove from queue, add to active jobs
+      setAllUnreviewedSubmissions(prev => prev.filter(s => s.id !== submission.id));
+      setSubmissionStats(prev => ({
+        ...prev,
+        unreviewed: Math.max(0, prev.unreviewed - 1),
+        pending: prev.pending + 1,
+      }));
+      setActiveJobs(prev => [
+        ...prev,
+        {
+          id: result.id || `optimistic-${submission.id}`,
+          status: 'pending' as const,
+          title: submission.title,
+          submissionId: submission.id,
+          createdAt: new Date().toISOString(),
+          startedAt: null,
+          attempts: 0,
+        },
+      ]);
+      // Adjust queue page if current page is now empty
+      setQueuePage(prev => {
+        const remaining = allUnreviewedSubmissions.length - 1;
+        const maxPage = Math.max(1, Math.ceil(remaining / QUEUE_PAGE_SIZE));
+        return prev > maxPage ? maxPage : prev;
+      });
+
+      // Refresh data silently to sync with server truth
       await refreshDataSilent();
     } catch (err) {
       console.error('[AI Reviewer] Queue error:', err);
@@ -805,7 +863,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
 
     try {
       // Queue ALL unreviewed submissions (not just visible ones)
-      for (const submission of allUnreviewedSubmissions) {
+      const queuedSubmissions = [...allUnreviewedSubmissions];
+      for (const submission of queuedSubmissions) {
         await context.api.fetch('/jobs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -821,7 +880,28 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         });
       }
 
-      // Refresh data silently without full page spinner
+      // Optimistic UI update: clear queue, add all to active jobs
+      setAllUnreviewedSubmissions([]);
+      setSubmissionStats(prev => ({
+        ...prev,
+        unreviewed: 0,
+        pending: prev.pending + queuedSubmissions.length,
+      }));
+      setActiveJobs(prev => [
+        ...prev,
+        ...queuedSubmissions.map(s => ({
+          id: `optimistic-${s.id}`,
+          status: 'pending' as const,
+          title: s.title,
+          submissionId: s.id,
+          createdAt: new Date().toISOString(),
+          startedAt: null,
+          attempts: 0,
+        })),
+      ]);
+      setQueuePage(1);
+
+      // Refresh data silently to sync with server truth
       await refreshDataSilent();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to queue reviews');
@@ -881,6 +961,89 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       }
       return next;
     });
+  };
+
+  // Format review analysis into readable feedback text
+  const formatReviewFeedback = (analysis: AnalysisDetails): string => {
+    const parts: string[] = [];
+
+    if (analysis.summary) {
+      parts.push(`Summary:\n${analysis.summary}`);
+    }
+
+    if (analysis.strengths && analysis.strengths.length > 0) {
+      parts.push(`Strengths:\n${analysis.strengths.map(s => `- ${s}`).join('\n')}`);
+    }
+
+    if (analysis.weaknesses && analysis.weaknesses.length > 0) {
+      parts.push(`Areas for Improvement:\n${analysis.weaknesses.map(w => `- ${w}`).join('\n')}`);
+    }
+
+    if (analysis.suggestions && analysis.suggestions.length > 0) {
+      parts.push(`Suggestions:\n${analysis.suggestions.map(s => `- ${s}`).join('\n')}`);
+    }
+
+    if (analysis.overallScore !== undefined) {
+      parts.push(`Overall Score: ${analysis.overallScore}/5`);
+    }
+
+    return parts.join('\n\n');
+  };
+
+  // Open feedback modal pre-filled with review analysis
+  const openFeedbackModal = (review: RecentReview) => {
+    const body = review.analysis
+      ? formatReviewFeedback(review.analysis)
+      : 'No detailed analysis available for this review.';
+
+    setFeedbackModal({
+      review,
+      subject: `Feedback on your submission: ${review.title}`,
+      body,
+    });
+    setFeedbackSuccess(false);
+  };
+
+  // Send feedback message to speaker via platform messaging API
+  const sendFeedback = async () => {
+    if (!feedbackModal) return;
+
+    setSendingFeedback(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          submissionId: feedbackModal.review.submissionId,
+          subject: feedbackModal.subject,
+          message: feedbackModal.body,
+        }),
+      });
+
+      if (response.status === 404) {
+        setError('Messaging is not available on this platform. You can send feedback by navigating to the submission page directly.');
+        setSendingFeedback(false);
+        return;
+      }
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to send feedback');
+      }
+
+      setFeedbackSuccess(true);
+      setTimeout(() => {
+        setFeedbackModal(null);
+        setFeedbackSuccess(false);
+      }, 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send feedback');
+    } finally {
+      setSendingFeedback(false);
+    }
   };
 
   // Re-review all recent reviews
@@ -1074,6 +1237,84 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send Feedback Modal */}
+      {feedbackModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="feedback-modal">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 max-w-lg mx-4 w-full">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-full">
+                <MessageSquare className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Send Feedback to Speaker
+              </h3>
+            </div>
+            {feedbackSuccess ? (
+              <div className="py-8 text-center">
+                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                <p className="text-sm font-medium text-green-700 dark:text-green-300">Feedback sent successfully!</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Subject
+                    </label>
+                    <input
+                      type="text"
+                      value={feedbackModal.subject}
+                      onChange={(e) => setFeedbackModal(prev => prev ? { ...prev, subject: e.target.value } : null)}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      data-testid="feedback-subject"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Message
+                    </label>
+                    <textarea
+                      value={feedbackModal.body}
+                      onChange={(e) => setFeedbackModal(prev => prev ? { ...prev, body: e.target.value } : null)}
+                      rows={12}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono"
+                      data-testid="feedback-body"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    onClick={() => { setFeedbackModal(null); setFeedbackSuccess(false); }}
+                    disabled={sendingFeedback}
+                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={sendFeedback}
+                    disabled={sendingFeedback || !feedbackModal.subject.trim() || !feedbackModal.body.trim()}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-md disabled:opacity-50 transition-colors"
+                    data-testid="send-feedback-button"
+                  >
+                    {sendingFeedback ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        Send Feedback
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1549,6 +1790,49 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                   </h3>
                 </div>
                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  {recentReviews.length > 0 && (
+                    <div className="flex items-center gap-1" data-testid="sort-controls">
+                      <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+                      <button
+                        onClick={() => {
+                          if (reviewsSortBy === 'date') {
+                            setReviewsSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setReviewsSortBy('date');
+                            setReviewsSortDir('desc');
+                          }
+                          setReviewsPage(1);
+                        }}
+                        className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
+                          reviewsSortBy === 'date'
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                        }`}
+                        data-testid="sort-date-button"
+                      >
+                        Date {reviewsSortBy === 'date' ? (reviewsSortDir === 'desc' ? '\u2193' : '\u2191') : ''}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (reviewsSortBy === 'title') {
+                            setReviewsSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setReviewsSortBy('title');
+                            setReviewsSortDir('asc');
+                          }
+                          setReviewsPage(1);
+                        }}
+                        className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
+                          reviewsSortBy === 'title'
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                        }`}
+                        data-testid="sort-title-button"
+                      >
+                        Title {reviewsSortBy === 'title' ? (reviewsSortDir === 'asc' ? '\u2191' : '\u2193') : ''}
+                      </button>
+                    </div>
+                  )}
                   {recentReviews.length > 0 && (hasApiKey || !apiKeyStatusKnown) && (
                     <button
                       onClick={queueAllReReviews}
@@ -1575,7 +1859,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                 ) : (
                   <>
                     <div className="divide-y divide-slate-200 dark:divide-slate-700">
-                      {recentReviews
+                      {sortedReviews
                         .slice((reviewsPage - 1) * REVIEWS_PAGE_SIZE, reviewsPage * REVIEWS_PAGE_SIZE)
                         .map((review) => {
                         const isExpanded = expandedReviews.has(review.id);
@@ -1729,6 +2013,20 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                                     </div>
                                   )}
 
+                                  {/* Send Feedback Button */}
+                                  {review.submissionId && (
+                                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                                      <button
+                                        onClick={() => openFeedbackModal(review)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-md hover:bg-purple-50 dark:hover:bg-purple-950/50 transition-colors"
+                                        data-testid="open-feedback-button"
+                                      >
+                                        <Send className="h-3.5 w-3.5" />
+                                        Send Feedback to Speaker
+                                      </button>
+                                    </div>
+                                  )}
+
                                   {/* Confidence indicator */}
                                   {analysis.confidence !== undefined && (
                                     <div className="text-xs text-slate-500 dark:text-slate-500 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center gap-4">
@@ -1763,10 +2061,10 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                     </div>
 
                     {/* Pagination Controls for Recent Reviews */}
-                    {recentReviews.length > REVIEWS_PAGE_SIZE && (
+                    {sortedReviews.length > REVIEWS_PAGE_SIZE && (
                       <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
                         <p className="text-sm text-slate-500 dark:text-slate-400">
-                          Showing {((reviewsPage - 1) * REVIEWS_PAGE_SIZE) + 1}-{Math.min(reviewsPage * REVIEWS_PAGE_SIZE, recentReviews.length)} of {recentReviews.length}
+                          Showing {((reviewsPage - 1) * REVIEWS_PAGE_SIZE) + 1}-{Math.min(reviewsPage * REVIEWS_PAGE_SIZE, sortedReviews.length)} of {sortedReviews.length}
                         </p>
                         <div className="flex items-center gap-2">
                           <button
@@ -1778,11 +2076,11 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
                             Previous
                           </button>
                           <span className="text-sm text-slate-600 dark:text-slate-400 px-2">
-                            Page {reviewsPage} of {Math.ceil(recentReviews.length / REVIEWS_PAGE_SIZE)}
+                            Page {reviewsPage} of {Math.ceil(sortedReviews.length / REVIEWS_PAGE_SIZE)}
                           </span>
                           <button
-                            onClick={() => setReviewsPage(p => Math.min(Math.ceil(recentReviews.length / REVIEWS_PAGE_SIZE), p + 1))}
-                            disabled={reviewsPage >= Math.ceil(recentReviews.length / REVIEWS_PAGE_SIZE)}
+                            onClick={() => setReviewsPage(p => Math.min(Math.ceil(sortedReviews.length / REVIEWS_PAGE_SIZE), p + 1))}
+                            disabled={reviewsPage >= Math.ceil(sortedReviews.length / REVIEWS_PAGE_SIZE)}
                             className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             Next

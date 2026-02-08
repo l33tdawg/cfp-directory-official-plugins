@@ -50,12 +50,12 @@ export interface AiReviewerConfig {
 // =============================================================================
 
 interface GeneralSettings {
-  aiProvider?: string;
+  aiProvider?: 'openai' | 'anthropic' | 'gemini';
   model?: string;
   temperature?: number;
   autoReview?: boolean;
   useEventCriteria?: boolean;
-  strictnessLevel?: string;
+  strictnessLevel?: 'lenient' | 'moderate' | 'strict';
   customPersona?: string;
   reviewFocus?: string[];
   enableDuplicateDetection?: boolean;

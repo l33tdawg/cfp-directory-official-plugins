@@ -20,6 +20,11 @@ echo "Building admin components..."
 node "$REPO_ROOT/scripts/build-admin-components.js"
 echo ""
 
+# Build server bundles
+echo "Building server bundles..."
+node "$REPO_ROOT/scripts/build-server-bundle.js"
+echo ""
+
 echo "Building plugin archives..."
 
 for plugin_dir in "$PLUGINS_DIR"/*/; do

@@ -6,7 +6,7 @@ Official plugin repository for [CFP Directory](https://github.com/l33tdawg/cfp-d
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [AI Paper Reviewer](plugins/ai-paper-reviewer/) | 1.28.0 | Intelligent submission analysis with cost tracking, budget management, speaker context, criteria-based scoring, and Google Search grounding for fact-checking |
+| [AI Paper Reviewer](plugins/ai-paper-reviewer/) | 1.36.0 | Intelligent submission analysis with cost tracking, budget management, speaker context, criteria-based scoring, and Google Search grounding for fact-checking |
 | [Example: Webhook Notifications](plugins/example-webhook/) | 1.1.0 | A starter template for plugin developers demonstrating hooks, config schemas, HMAC signatures, and background job retries |
 
 ## How It Works
@@ -53,10 +53,12 @@ cfp-directory-official-plugins/
 │   │   │   ├── providers.ts
 │   │   │   ├── json-repair.ts
 │   │   │   └── similarity.ts
-│   │   └── dist/                    # Pre-compiled admin bundles (generated)
+│   │   └── dist/                    # Pre-compiled bundles (generated)
 │   │       ├── admin-pages.js
 │   │       ├── admin-pages.js.map
-│   │       └── admin-pages.manifest.json
+│   │       ├── admin-pages.manifest.json
+│   │       ├── server.mjs           # Server-side ESM bundle
+│   │       └── server.mjs.map
 │   └── example-webhook/             # Developer starter template
 │       ├── manifest.json
 │       └── index.ts
@@ -66,7 +68,8 @@ cfp-directory-official-plugins/
 │   └── ai-paper-reviewer.md        # Extended documentation
 └── scripts/
     ├── build-archives.sh           # Builds release zips
-    └── build-admin-components.js   # Compiles admin page components
+    ├── build-admin-components.js   # Compiles admin page components
+    └── build-server-bundle.js      # Compiles server-side ESM bundles
 ```
 
 ## Building Release Archives
@@ -77,9 +80,10 @@ To create zip archives for a GitHub release:
 npm run build
 ```
 
-This runs two steps:
+This runs three steps:
 1. **Compiles admin components** - Uses esbuild to bundle admin page components (`components/admin-*.tsx`) into browser-ready JavaScript (`dist/admin-pages.js`). These bundles use the host app's React instance via window globals.
-2. **Creates zip archives** - Packages each plugin (including the compiled bundles) into `dist/<plugin-name>.zip`
+2. **Compiles server bundles** - Uses esbuild to bundle server-side plugin code (`index.ts` + `lib/`) into ESM (`dist/server.mjs`). This enables build-time plugin loading on the hosted platform without runtime TypeScript compilation.
+3. **Creates zip archives** - Packages each plugin (including the compiled bundles) into `dist/<plugin-name>.zip`
 
 Attach the zip to a GitHub release matching the `downloadUrl` pattern in `registry.json`.
 

@@ -1450,6 +1450,8 @@ export async function handleAiReviewJob(
           contentScore,
           presentationScore,
           relevanceScore,
+          scores: criteriaScores as Record<string, number>,
+          status: 'completed' as const,
           privateNotes,
           publicNotes,
           recommendation: mappedRecommendation,

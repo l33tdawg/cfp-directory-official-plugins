@@ -156,7 +156,10 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.37.1 (Current)
+### v1.37.2 (Current)
+- **Fix re-analysis not updating reviews table** - Pass `scores` and `status` fields to `ctx.reviews.update()` so re-analyzing a submission updates the main reviews section (scores, rating) and not just the sidebar
+
+### v1.37.1
 - **Type safety fix** - Narrow `GeneralSettings.aiProvider` and `strictnessLevel` to match `AiReviewerConfig` union types, fixing strict TypeScript build errors
 
 ### v1.37.0

@@ -156,7 +156,10 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.37.2 (Current)
+### v1.38.0 (Current)
+- **Fix score-recommendation consistency** - Recommendation (ACCEPT/REJECT/NEUTRAL etc.) is now derived from the overall score instead of relying on the AI's independent recommendation field. A score of 3/5 now correctly shows NEUTRAL instead of ACCEPT. Both the prompt and code enforce the mapping: 1=STRONG_REJECT, 2=REJECT, 3=NEUTRAL, 4=ACCEPT, 5=STRONG_ACCEPT.
+
+### v1.37.2
 - **Fix re-analysis not updating reviews table** - Pass `scores` and `status` fields to `ctx.reviews.update()` so re-analyzing a submission updates the main reviews section (scores, rating) and not just the sidebar
 
 ### v1.37.1

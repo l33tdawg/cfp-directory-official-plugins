@@ -9,7 +9,7 @@
     {
       "name": "ai-paper-reviewer",
       "displayName": "AI Paper Reviewer",
-      "version": "1.37.2",
+      "version": "1.38.0",
       "apiVersion": "1.0",
       "description": "Intelligent submission analysis with cost tracking, budget management, speaker context, criteria-based scoring, and Google Search grounding for fact-checking",
       "author": "CFP Directory",
@@ -43,8 +43,8 @@
         { "path": "/personas", "title": "Reviewer Personas", "component": "AdminPersonas" },
         { "path": "/settings", "title": "Settings", "component": "AdminSettings" }
       ],
-      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/v1.37.2/ai-paper-reviewer.zip",
-      "sha256": "b079fcf6d08f539e15ce025253115eac12594d137062d2fe7b5f132d4b4908a0"
+      "downloadUrl": "https://github.com/l33tdawg/cfp-directory-official-plugins/releases/download/v1.38.0/ai-paper-reviewer.zip",
+      "sha256": "1d87f245534cc0bfd41436608b6030afe526e955e167d3108b73b9dd507d61fc"
     },
     {
       "name": "example-webhook",

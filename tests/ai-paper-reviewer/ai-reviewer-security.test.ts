@@ -188,8 +188,8 @@ describe('AI Paper Reviewer Security', () => {
         'Test submission'
       );
 
-      // Should default to 'NEUTRAL' since the value is not a string
-      expect(result.recommendation).toBe('NEUTRAL');
+      // Recommendation is now derived from overallScore (4 = ACCEPT), not from the malicious field
+      expect(result.recommendation).toBe('ACCEPT');
     });
 
     it('should handle strengths as string instead of array', async () => {

@@ -138,6 +138,18 @@ export interface AiAnalysisResult {
 // =============================================================================
 
 /**
+ * Derive recommendation from overall score to ensure consistency.
+ * The AI prompt also instructs this mapping, but we enforce it in code as a safety net.
+ */
+function deriveRecommendation(overallScore: number): 'STRONG_REJECT' | 'REJECT' | 'NEUTRAL' | 'ACCEPT' | 'STRONG_ACCEPT' {
+  if (overallScore <= 1) return 'STRONG_REJECT';
+  if (overallScore <= 2) return 'REJECT';
+  if (overallScore <= 3) return 'NEUTRAL';
+  if (overallScore <= 4) return 'ACCEPT';
+  return 'STRONG_ACCEPT';
+}
+
+/**
  * Speaker info for submission text
  * NOTE: Email is intentionally excluded for privacy - only public info is sent to AI
  */
@@ -386,14 +398,16 @@ export async function callAiProvider(
   // Calculate cost based on usage and model
   const costUsd = calculateCost(totalUsage, model);
 
+  const overallScore = typeof parsed.overallScore === 'number' ? clamp(parsed.overallScore) : 3;
+
   const result: AiAnalysisResult = {
     criteriaScores,
-    overallScore: typeof parsed.overallScore === 'number' ? clamp(parsed.overallScore) : 3,
+    overallScore,
     summary: validateString(parsed.summary, ''),
     strengths: validateStringArray(parsed.strengths),
     weaknesses: validateStringArray(parsed.weaknesses),
     suggestions: validateStringArray(parsed.suggestions),
-    recommendation: validateString(parsed.recommendation, 'NEUTRAL'),
+    recommendation: deriveRecommendation(overallScore),
     confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0.8,
     rawResponse,
     parseAttempts,
@@ -1399,15 +1413,8 @@ export async function handleAiReviewJob(
           reviewerId: serviceAccountId
         });
 
-        // Map AI recommendation to ReviewRecommendation enum
-        const recommendationMap: Record<string, 'STRONG_ACCEPT' | 'ACCEPT' | 'NEUTRAL' | 'REJECT' | 'STRONG_REJECT'> = {
-          'STRONG_ACCEPT': 'STRONG_ACCEPT',
-          'ACCEPT': 'ACCEPT',
-          'NEUTRAL': 'NEUTRAL',
-          'REJECT': 'REJECT',
-          'STRONG_REJECT': 'STRONG_REJECT',
-        };
-        const mappedRecommendation = recommendationMap[result.recommendation.toUpperCase()] || 'NEUTRAL';
+        // Recommendation is already derived from overallScore by deriveRecommendation()
+        const mappedRecommendation = result.recommendation as 'STRONG_ACCEPT' | 'ACCEPT' | 'NEUTRAL' | 'REJECT' | 'STRONG_REJECT';
 
         // Build detailed private notes with AI analysis (only include sections with content)
         const privateNoteParts = [`## AI Analysis Summary`, result.summary || 'No summary available.', ''];

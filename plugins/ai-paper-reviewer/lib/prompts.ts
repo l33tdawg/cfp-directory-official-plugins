@@ -69,6 +69,13 @@ ${criteriaScoresExample}
   "confidence": <0.0-1.0>
 }
 
+IMPORTANT: The recommendation MUST be consistent with the overallScore:
+- 1 = STRONG_REJECT
+- 2 = REJECT
+- 3 = NEUTRAL
+- 4 = ACCEPT
+- 5 = STRONG_ACCEPT
+
 Respond ONLY with the JSON object, no additional text.`;
 }
 

@@ -156,7 +156,11 @@ ai-paper-reviewer/
 
 ## Version History
 
-### v1.38.0 (Current)
+### v1.39.0 (Current)
+- **Fix review queue refresh** - Recent Reviews now correctly shows the latest completed review at the top by sorting before deduplication, and auto-resets to page 1 when new reviews arrive
+- **Fix "To be reviewed" showing in-progress items** - Submissions with pending/processing status no longer appear in the review queue; tightened filter and eliminated race condition where server re-fetch could revert optimistic removal
+
+### v1.38.0
 - **Fix score-recommendation consistency** - Recommendation (ACCEPT/REJECT/NEUTRAL etc.) is now derived from the overall score instead of relying on the AI's independent recommendation field. A score of 3/5 now correctly shows NEUTRAL instead of ACCEPT. Both the prompt and code enforce the mapping: 1=STRONG_REJECT, 2=REJECT, 3=NEUTRAL, 4=ACCEPT, 5=STRONG_ACCEPT.
 
 ### v1.37.2

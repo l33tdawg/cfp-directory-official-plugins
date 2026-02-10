@@ -229,6 +229,14 @@ function buildRecentReviews(completedJobs: Array<{
     };
   });
 
+  // Sort by completedAt descending BEFORE deduplication so we always keep
+  // the most recent review for each submission (important for re-reviews)
+  allReviews.sort((a, b) => {
+    const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+    const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+    return dateB - dateA;
+  });
+
   // Deduplicate by submissionId, keeping only the most recent review for each
   const seenSubmissions = new Set<string>();
   return allReviews.filter((review) => {
@@ -494,6 +502,8 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         if (freshIds.size > 0) {
           setNewReviewIds(freshIds);
           setTimeout(() => setNewReviewIds(new Set()), 500);
+          // Reset to page 1 so new reviews are immediately visible
+          setReviewsPage(1);
         }
       }
       prevReviewIdsRef.current = currentIds;
@@ -520,7 +530,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
             const submissionsData = await subRes.json();
             if (submissionsData.submissions) {
               const unreviewed = submissionsData.submissions.filter(
-                (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || !s.aiReview
+                (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || (!s.aiReview && s.aiReviewStatus !== 'pending' && s.aiReviewStatus !== 'processing')
               );
               setAllUnreviewedSubmissions(unreviewed);
               setUnreviewedSubmissions(unreviewed.slice(0, QUEUE_PAGE_SIZE));
@@ -558,7 +568,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       // Update submissions
       if (submissionsData.submissions) {
         const unreviewed = submissionsData.submissions.filter(
-          (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || !s.aiReview
+          (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || (!s.aiReview && s.aiReviewStatus !== 'pending' && s.aiReviewStatus !== 'processing')
         );
         setAllUnreviewedSubmissions(unreviewed);
         setUnreviewedSubmissions(unreviewed.slice(0, QUEUE_PAGE_SIZE));
@@ -725,7 +735,7 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
       // Set submission data
       if (submissionsData.submissions) {
         const unreviewed = submissionsData.submissions.filter(
-          (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || !s.aiReview
+          (s: SubmissionWithReview) => s.aiReviewStatus === 'none' || (!s.aiReview && s.aiReviewStatus !== 'pending' && s.aiReviewStatus !== 'processing')
         );
         setAllUnreviewedSubmissions(unreviewed);
         setUnreviewedSubmissions(unreviewed.slice(0, QUEUE_PAGE_SIZE));
@@ -838,8 +848,11 @@ export function AdminDashboard({ context, data }: PluginComponentProps) {
         return prev > maxPage ? maxPage : prev;
       });
 
-      // Refresh data silently to sync with server truth
-      await refreshDataSilent();
+      // Trigger active jobs refresh to pick up the new pending job.
+      // Don't call refreshDataSilent() here — it re-fetches submissions and
+      // can revert the optimistic removal if the server hasn't updated
+      // aiReviewStatus yet (race condition). The 5s polling will sync.
+      await fetchActiveJobs();
     } catch (err) {
       console.error('[AI Reviewer] Queue error:', err);
       setError(err instanceof Error ? err.message : 'Failed to queue review');
